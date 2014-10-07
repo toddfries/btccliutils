@@ -71,16 +71,16 @@ foreach my $tx (@{$parsed}) {
 		print "Error somewhere, parsed tx = ".ref($tx)."\n";
 		exit(1);
 	}
-	$txcount++;
-	foreach my $var (sort keys %{$tx}) {
-		printf "%02d: '%s' = '%s'\n", $txcount, $var, $tx->{$var};
-	}
 	if (defined($opt_b)) {
 		foreach my $txb (split(/,/,$opt_b)) {
 			if ($txb eq $tx->{'txid'}) {
 				next TX;
 			}
 		}
+	}
+	$txcount++;
+	foreach my $var (sort keys %{$tx}) {
+		printf "%02d: '%s' = '%s'\n", $txcount, $var, $tx->{$var};
 	}
 	my $txs;
 	$txs->{'txid'} = $tx->{'txid'};

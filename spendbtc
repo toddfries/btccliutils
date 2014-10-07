@@ -1,0 +1,173 @@
+#!/usr/bin/perl
+
+# Copyright (c) 2014 Todd T. Fries <todd@fries.net>
+#
+# Permission to use, copy, modify, and distribute this software for any
+# purpose with or without fee is hereby granted, provided that the above
+# copyright notice and this permission notice appear in all copies.
+#
+# THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+# WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+# MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+# ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+# WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+# ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+# OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+use warnings;
+use strict;
+
+use JSON;
+
+use OpenBSD::Getopt;
+
+our $opt_b;		# blacklist of txhash to not use, comma separated
+our $opt_o;		# output addr:pct, comma separated
+our $opt_t = 0.0001;	# txfee
+our $opt_x;		# external command to get at wallet rpc bits
+
+getopts('b:o:t:x:');
+
+
+sub usage
+{
+	printf STDERR "must define -x <command> to access the wallet\n";
+	printf STDERR "must define -o <addr>:pct[,addr:pct] to send funds\n";
+	exit(1);
+}
+
+if (!defined($opt_x)) {
+	usage();
+}
+if (!defined($opt_o)) {
+	usage();
+}
+
+open(U,"${opt_x} listunspent|");
+my $line;
+my $text = "";
+while(<U>) {
+	chomp($line = $_);
+	$text .= $line;
+}
+close(U);
+
+my $json = JSON->new->allow_nonref;
+my $parsed = $json->decode( $text );
+
+#print $json->pretty->encode( $parsed );
+
+if (ref($parsed) ne "ARRAY") {
+	print "Error somewhere, parsed ref = ".ref($parsed)."\n";
+	exit(1);
+}
+
+my @txsend = ();
+my $txcount = 0;
+my $txvalue = 0.00000000;
+TX:
+foreach my $tx (@{$parsed}) {
+	if (ref($tx) ne "HASH") {
+		print "Error somewhere, parsed tx = ".ref($tx)."\n";
+		exit(1);
+	}
+	$txcount++;
+	foreach my $var (sort keys %{$tx}) {
+		printf "%02d: '%s' = '%s'\n", $txcount, $var, $tx->{$var};
+	}
+	if (defined($opt_b)) {
+		foreach my $txb (split(/,/,$opt_b)) {
+			if ($txb eq $tx->{'txid'}) {
+				next TX;
+			}
+		}
+	}
+	my $txs;
+	$txs->{'txid'} = $tx->{'txid'};
+	$txs->{'vout'} = $tx->{'vout'};
+	push @txsend,$txs;
+	$txvalue += $tx->{'amount'}+0.00000000;
+}
+print "All unspent inputs total: ".$txvalue."\n";
+
+#print "Pretty view of transactions to send:\n";
+#print $json->pretty->encode( \@txsend );
+print "Compact view of transactions to send:\n";
+#print $json->encode( \@txsend )."\n";
+my $str = "[";
+foreach my $tx (@txsend) {
+	$str .= "{";
+	foreach my $v (sort keys %{$tx}) {
+		if ($v eq "txid") {
+			$str .= sprintf "\"txid\":\"%s\",",$tx->{$v};
+			next;
+		}
+		$str .= sprintf "\"vout\":%d",$tx->{$v};
+	}
+	$str .= "},"
+}
+$str =~ s/,$//;
+$str .= "]";
+print $str."\n";
+
+my $sendtx = $str;
+
+my $addrs;
+my $net = $txvalue - $opt_t;
+my $sum = 0.00000000;
+foreach my $o (split(/,/,$opt_o)) {
+	my ($addr,$pct) = split(/:/,$o);
+
+	my $amt = $net*($pct/100);
+
+	$addrs->{$addr} = sprintf "%0.8f",$amt;
+
+	$sum += $amt;
+}
+
+print "Compact view of dest addrs:\n";
+#print $json->encode( $addrs )."\n";
+$str = "{";
+foreach my $v (sort keys %{$addrs}) {
+	$str .= sprintf "\"%s\":%0.8f,",$v,$addrs->{$v};
+}
+$str =~ s/,$//;
+$str .= "}";
+print $str."\n";
+
+my $sendaddrs = $str;
+
+printf "Tx Fee: %0.8f\n",$txvalue-$sum;
+
+my $rawtxhex;
+open(C,"${opt_x} createrawtransaction '${sendtx}' '${sendaddrs}'|");
+my $tmp = <C>;
+close(C);
+if (!defined($tmp)) {
+	print "rawtxhex !defined, bailing\n";
+	exit(1);
+}
+chomp($rawtxhex = $tmp);
+
+my $signedtx = "";
+open(S,"${opt_x} signrawtransaction ${rawtxhex}|");
+#chomp($signedtx = <S>);
+while(<S>) {
+	chomp($line = $_);
+	$signedtx .= $line;
+#	print "S: ".$line."\n";
+}
+close(S);
+my $parsedsignedtx = $json->decode( $signedtx );
+my $signedhex = $parsedsignedtx->{'hex'};
+
+#open(D,"${opt_x} decoderawtransaction ${signedhex}|");
+#while(<D>) {
+#	print "D: ".$_;
+#}
+#close(D);
+
+open(SEND,">>","sendtx.log");
+print SEND "${opt_x} sendrawtransaction ${signedhex}\n";
+close(SEND);
+

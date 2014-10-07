@@ -11,7 +11,9 @@ Random utilities for interacting with bitcoin rpc.
      rpc calls
    - cli utility
    - uses 'btcctl' from conformal's btcd
+
   Example:
+
     spendbtc -x "btcctl" -o 12345:70,12346:10,12347:20 -b f12345 -t 0.03
 
 Donations: 1HeSyCxcMvmaZg3CyqSthrqgm6fwdREqfG

@@ -89,6 +89,7 @@ foreach my $tx (@{$parsed}) {
 	$txvalue += $tx->{'amount'}+0.00000000;
 }
 print "All unspent inputs total: ".$txvalue."\n";
+print "Wallets balance: ".`${opt_x} getbalance`."\n";
 
 #print "Pretty view of transactions to send:\n";
 #print $json->pretty->encode( \@txsend );

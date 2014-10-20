@@ -17,6 +17,14 @@
 use warnings;
 use strict;
 
+sub usage
+{
+	printf STDERR "must define -x <command> to access the wallet\n";
+	printf STDERR "must define -o <addr>:pct[,addr:pct] to send funds\n";
+	exit(1);
+}
+
+
 use JSON;
 
 use OpenBSD::Getopt;
@@ -31,23 +39,27 @@ $opt_c = $ENV{'HOME'}."/.spendbtc.conf";
 
 getopts('b:c:o:t:x:');
 
-if ( -f $opt_c ) {
-	eval `cat $opt_c`;
+our @blacklist;
+if (defined($opt_b)) {
+	@blacklist = split(/,/,$opt_b);
 }
 
-sub usage
-{
-	printf STDERR "must define -x <command> to access the wallet\n";
-	printf STDERR "must define -o <addr>:pct[,addr:pct] to send funds\n";
-	exit(1);
+our @outputs;
+if (defined($opt_o)) {
+	@outputs = split(/,/,$opt_o);
+}
+
+if ( -f $opt_c ) {
+	eval `cat $opt_c`;
 }
 
 if (!defined($opt_x)) {
 	usage();
 }
-if (!defined($opt_o)) {
+if (!@outputs) {
 	usage();
 }
+
 
 open(U,"${opt_x} listunspent|");
 my $line;
@@ -77,11 +89,9 @@ foreach my $tx (@{$parsed}) {
 		print "Error somewhere, parsed tx = ".ref($tx)."\n";
 		exit(1);
 	}
-	if (defined($opt_b)) {
-		foreach my $txb (split(/,/,$opt_b)) {
-			if ($txb eq $tx->{'txid'}) {
-				next TX;
-			}
+	foreach my $txb (@blacklist) {
+		if ($txb eq $tx->{'txid'}) {
+			next TX;
 		}
 	}
 	$txcount++;
@@ -122,7 +132,7 @@ my $sendtx = $str;
 my $addrs;
 my $net = $txvalue - $opt_t;
 my $sum = 0.00000000;
-foreach my $o (split(/,/,$opt_o)) {
+foreach my $o (@outputs) {
 	my ($addr,$pct) = split(/:/,$o);
 
 	my $amt = $net*($pct/100);

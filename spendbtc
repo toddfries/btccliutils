@@ -22,12 +22,18 @@ use JSON;
 use OpenBSD::Getopt;
 
 our $opt_b;		# blacklist of txhash to not use, comma separated
+our $opt_c;		# conf file
 our $opt_o;		# output addr:pct, comma separated
 our $opt_t = 0.0001;	# txfee
 our $opt_x;		# external command to get at wallet rpc bits
 
-getopts('b:o:t:x:');
+$opt_c = $ENV{'HOME'}."/.spendbtc.conf";
 
+getopts('b:c:o:t:x:');
+
+if ( -f $opt_c ) {
+	eval `cat $opt_c`;
+}
 
 sub usage
 {

@@ -39,9 +39,9 @@ $opt_c = $ENV{'HOME'}."/.spendbtc.conf";
 
 getopts('b:c:o:t:x:');
 
-our @blacklist;
+our @txblacklist;
 if (defined($opt_b)) {
-	@blacklist = split(/,/,$opt_b);
+	@txblacklist = split(/,/,$opt_b);
 }
 
 our @outputs;
@@ -60,6 +60,16 @@ if (!@outputs) {
 	usage();
 }
 
+# sanity check that it equals 100%, 1.0 = 1%
+my $pct = 0.0;
+foreach my $o (@outputs) {
+	my ($addr,$p) = split(/:/,$o);
+	$pct += $p;
+}
+if ($pct != 100.0) {
+	printf "Oops, percentage adds up to %0.2f, try again..\n",$pct;
+	usage();
+}
 
 open(U,"${opt_x} listunspent|");
 my $line;
@@ -89,7 +99,7 @@ foreach my $tx (@{$parsed}) {
 		print "Error somewhere, parsed tx = ".ref($tx)."\n";
 		exit(1);
 	}
-	foreach my $txb (@blacklist) {
+	foreach my $txb (@txblacklist) {
 		if ($txb eq $tx->{'txid'}) {
 			next TX;
 		}

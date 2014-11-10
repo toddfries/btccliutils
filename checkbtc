@@ -1,0 +1,116 @@
+#!/usr/bin/perl
+
+# Copyright (c) 2014 Todd T. Fries <todd@fries.net>
+#
+# Permission to use, copy, modify, and distribute this software for any
+# purpose with or without fee is hereby granted, provided that the above
+# copyright notice and this permission notice appear in all copies.
+#
+# THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+# WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+# MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+# ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+# WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+# ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+# OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+use warnings;
+use strict;
+
+sub usage
+{
+	printf STDERR "must define -x <command> to access the wallet\n";
+	printf STDERR "must define -o <addr>:pct[,addr:pct] to send funds\n";
+	exit(1);
+}
+
+
+use JSON;
+
+use OpenBSD::Getopt;
+
+our $opt_b;		# blacklist of txhash to not use, comma separated
+our $opt_c;		# conf file
+our $opt_v;		# verbose
+
+$opt_c = $ENV{'HOME'}."/.checkbtc.conf";
+
+getopts('b:c:o:v');
+
+our @txblacklist;
+if (defined($opt_b)) {
+	@txblacklist = split(/,/,$opt_b);
+}
+
+our @walletcmds;
+our %addrname;
+our $usdperbtc = "377.00"; # random value, over-ride in config
+
+if ( -f $opt_c ) {
+	eval `cat $opt_c`;
+	if ($@) {
+		print "Error: ".$@."\n";
+	}
+}
+
+my %addrs;
+foreach my $opt_x (@walletcmds) {
+	printf "Processing listunspent for: %s\n",$opt_x;
+	open(U,"${opt_x} listunspent|");
+	my $line;
+	my $text = "";
+	while(<U>) {
+		chomp($line = $_);
+		$text .= $line;
+	}
+	close(U);
+
+	my $json = JSON->new->allow_nonref;
+	my $parsed = $json->decode( $text );
+
+	#print $json->pretty->encode( $parsed );
+
+	if (ref($parsed) ne "ARRAY") {
+		print "Error somewhere, parsed ref = ".ref($parsed)."\n";
+		exit(1);
+	}
+
+	my @txsend = ();
+	my $txcount = 0;
+	my $txvalue = 0.00000000;
+	TX:
+	foreach my $tx (@{$parsed}) {
+		if (ref($tx) ne "HASH") {
+			print "Error somewhere, parsed tx = ".ref($tx)."\n";
+			exit(1);
+		}
+		foreach my $txb (@txblacklist) {
+			if ($txb eq $tx->{'txid'}) {
+				next TX;
+			}
+		}
+		$txcount++;
+		if (defined($opt_v)) {
+		    foreach my $var (sort keys %{$tx}) {
+			printf "%02d: '%s' = '%s'\n", $txcount, $var, $tx->{$var};
+		    }
+		}
+		my $address = $tx->{'address'};
+		if (defined($addrs{$address})) {
+			$addrs{$address} += $tx->{'amount'};
+		} else {
+			$addrs{$address} = $tx->{'amount'};
+		}
+	}
+	print "All unspent inputs total: ".$txvalue."\n";
+	print "Wallets balance: ".`${opt_x} getbalance`."\n";
+}
+
+foreach my $a (sort keys %addrs) {
+	my $name = $addrname{$a};
+	if (!defined($name)) {
+		$name = "?";
+	}
+	my $usd = $usdperbtc * $addrs{$a};
+	printf "  %20s: %0.8f BTC  \$%6.2f USD  (%s)\n",$a,$addrs{$a},$usd,$name;
+}

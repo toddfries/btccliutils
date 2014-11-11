@@ -56,7 +56,7 @@ if ( -f $opt_c ) {
 my %addrs;
 foreach my $opt_x (@walletcmds) {
 	printf "Processing listunspent for: %s\n",$opt_x;
-	open(U,"${opt_x} listunspent|");
+	open(U,"${opt_x} listunspent 2> /dev/null |");
 	my $line;
 	my $text = "";
 	while(<U>) {
@@ -66,7 +66,14 @@ foreach my $opt_x (@walletcmds) {
 	close(U);
 
 	my $json = JSON->new->allow_nonref;
-	my $parsed = $json->decode( $text );
+	my $parsed;
+	eval {
+		$parsed = $json->decode( $text );
+	};
+	if ($@) {
+		print "Error: ".$@."\n";
+		next;
+	}
 
 	#print $json->pretty->encode( $parsed );
 
@@ -112,5 +119,6 @@ foreach my $a (sort keys %addrs) {
 		$name = "?";
 	}
 	my $usd = $usdperbtc * $addrs{$a};
-	printf "  %20s: %0.8f BTC  \$%6.2f USD  (%s)\n",$a,$addrs{$a},$usd,$name;
+	#printf "  %20s: %0.8f BTC  \$%6.2f USD  (%s)\n",$a,$addrs{$a},$usd,$name;
+	printf " %-20s... %0.8f BTC  \$%6.2f USD  (%s)\n",$name,$addrs{$a},$usd,$a;
 }

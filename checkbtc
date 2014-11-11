@@ -55,18 +55,57 @@ if ( -f $opt_c ) {
 
 my %addrs;
 foreach my $opt_x (@walletcmds) {
-	printf "Processing listunspent for: %s\n",$opt_x;
-	open(U,"${opt_x} listunspent 2> /dev/null |");
+	printf "=> %s\n", $opt_x;
+	print  "  - getaddressbyaccount\n";
+
 	my $line;
 	my $text = "";
+	my $json = JSON->new->allow_nonref;
+	my $parsed;
+
+	open(U,"${opt_x} getaddressesbyaccount '' 2> /dev/null |");
+	while(<U>) {
+		chomp($line = $_);
+		$text .= $line;
+	}
+	close(U);
+	eval {
+		$parsed = $json->decode( $text );
+	};
+	if ($@) {
+		print "Error: ".$@."\n";
+		next;
+	}
+
+	#print $json->pretty->encode( $parsed );
+	if (ref($parsed) ne "ARRAY") {
+		print "Error somewhere, parsed ref = ".ref($parsed)."\n";
+		exit(1);
+	}
+
+	foreach my $addr (@{$parsed}) {
+		my $type = ref($addr);
+		if (length($type) > 0) {
+			printf "   addr is a %s\n", ref($addr);
+			next;
+		}
+		#printf "  addr: %s\n", $addr;
+		if (!defined($addrs{$addr})) {
+			$addrs{$addr} = 0.0;
+		}
+	}
+
+
+	print  "  - listunspent\n";
+	$line = undef;
+	$text = "";
+	open(U,"${opt_x} listunspent 2> /dev/null |");
 	while(<U>) {
 		chomp($line = $_);
 		$text .= $line;
 	}
 	close(U);
 
-	my $json = JSON->new->allow_nonref;
-	my $parsed;
 	eval {
 		$parsed = $json->decode( $text );
 	};

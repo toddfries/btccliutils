@@ -34,10 +34,11 @@ our $opt_c;		# conf file
 our $opt_o;		# output addr:pct, comma separated
 our $opt_t = 0.0001;	# txfee
 our $opt_x;		# external command to get at wallet rpc bits
+our $opt_v = 0;		# verbosity
 
 $opt_c = $ENV{'HOME'}."/.spendbtc.conf";
 
-getopts('b:c:o:t:x:');
+getopts('b:c:o:t:x:v');
 
 our @txblacklist;
 if (defined($opt_b)) {
@@ -105,8 +106,10 @@ foreach my $tx (@{$parsed}) {
 		}
 	}
 	$txcount++;
-	foreach my $var (sort keys %{$tx}) {
-		printf "%02d: '%s' = '%s'\n", $txcount, $var, $tx->{$var};
+	if ($opt_v > 0) {
+		foreach my $var (sort keys %{$tx}) {
+			printf "%02d: '%s' = '%s'\n", $txcount, $var, $tx->{$var};
+		}
 	}
 	my $txs;
 	$txs->{'txid'} = $tx->{'txid'};
@@ -203,3 +206,4 @@ open(SEND,">>","sendtx.log");
 print SEND "${opt_x} sendrawtransaction ${signedhex}\n";
 close(SEND);
 
+system("${opt_x} decoderawtransaction ${signedhex}");

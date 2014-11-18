@@ -42,8 +42,9 @@ if (defined($opt_b)) {
 	@txblacklist = split(/,/,$opt_b);
 }
 
-our @walletcmds;
+our %walletcmds;
 our %addrname;
+our %addrwallet;
 our $usdperbtc = "377.00"; # random value, over-ride in config
 
 if ( -f $opt_c ) {
@@ -54,7 +55,8 @@ if ( -f $opt_c ) {
 }
 
 my %addrs;
-foreach my $opt_x (@walletcmds) {
+foreach my $key (keys %walletcmds) {
+	my $opt_x = $walletcmds{$key};
 	printf "=> %s\n", $opt_x;
 	print  "  - getaddressbyaccount\n";
 
@@ -92,6 +94,7 @@ foreach my $opt_x (@walletcmds) {
 		#printf "  addr: %s\n", $addr;
 		if (!defined($addrs{$addr})) {
 			$addrs{$addr} = 0.0;
+			$addrwallet{$addr} = $key;
 		}
 	}
 
@@ -146,18 +149,24 @@ foreach my $opt_x (@walletcmds) {
 			$addrs{$address} += $tx->{'amount'};
 		} else {
 			$addrs{$address} = $tx->{'amount'};
+			$addrwallet{$address} = $key;
 		}
 	}
 	print "All unspent inputs total: ".$txvalue."\n";
 	print "Wallets balance: ".`${opt_x} getbalance`."\n";
 }
 
+my $total = 0.0;
+
 foreach my $a (sort keys %addrs) {
 	my $name = $addrname{$a};
 	if (!defined($name)) {
-		$name = "?";
+		$name = $addrwallet{$a}.":?";
 	}
 	my $usd = $usdperbtc * $addrs{$a};
 	#printf "  %20s: %0.8f BTC  \$%6.2f USD  (%s)\n",$a,$addrs{$a},$usd,$name;
 	printf " %-20s... %0.8f BTC  \$%6.2f USD  (%s)\n",$name,$addrs{$a},$usd,$a;
+	$total += $addrs{$a};
 }
+
+printf " %-20s... %0.8f BTC  \$%6.2f USD\n","TOTAL",$total,$total * $usdperbtc;

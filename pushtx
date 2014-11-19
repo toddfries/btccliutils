@@ -1,0 +1,45 @@
+#!/bin/ksh
+
+# Copyright (c) 2014 Todd T. Fries <todd@fries.net>
+#
+# Permission to use, copy, modify, and distribute this software for any
+# purpose with or without fee is hereby granted, provided that the above
+# copyright notice and this permission notice appear in all copies.
+#
+# THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+# WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+# MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+# ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+# WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+# ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+# OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+send() {
+	local extra="" url="$1" data="$2"
+	if [[ "$1" == https* ]]; then
+		extra0="--insecure"
+	fi
+	if [[ "$2" == {* ]]; then
+		extra1='-H "Content-Type: application/json"'
+	fi
+	curl $extra0 "$url" -X POST "$extra1" -d "$data"
+}
+
+while [ "$1" ]
+do
+	echo -n "=> blockchain.info: "
+	send https://blockchain.info/pushtx "tx=$1"
+
+	echo -n "=> helloblock.io: "
+	send https://mainnet.helloblock.io/v1/transactions "rawTxHex=$1"
+
+	echo -n "=> eligius.st: "
+	send http://eligius.st/~wizkid057/newstats/pushtxn.php "transaction=$1&send=Push"
+
+	echo -n "=> coins.assembly.com: "
+	send https://coins.assembly.com/v1/transactions '{"transaction_hex": "'"$1\"}"
+
+	echo -n "=> blockr.io: "
+	send https://btc.blockr.io/api/v1/tx/push '{"hex":"'"$1\"}"
+	shift
+done

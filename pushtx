@@ -1,4 +1,4 @@
-#!/bin/ksh
+#!/bin/sh
 
 # Copyright (c) 2014 Todd T. Fries <todd@fries.net>
 #
@@ -13,6 +13,8 @@
 # WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+# always glad to receive more sites to push tx'en to
 
 send() {
 	local extra="" url="$1" data="$2"

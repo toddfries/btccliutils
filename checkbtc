@@ -44,6 +44,7 @@ if (defined($opt_b)) {
 
 our %walletcmds;
 our %addrname;
+our %addrlist;
 our %addrwallet;
 our $usdperbtc = "377.00"; # random value, over-ride in config
 
@@ -51,6 +52,14 @@ if ( -f $opt_c ) {
 	eval `cat $opt_c`;
 	if ($@) {
 		print "Error: ".$@."\n";
+	}
+}
+
+foreach my $name (keys %addrlist) {
+	#print "addrlist ele1 is a ".ref($addrlist{$name})."\n";
+	foreach my $a (@{$addrlist{$name}}) {
+		#print "addrlist ele2 is a ".ref($a)."\n";
+		$addrname{$a} = $name;
 	}
 }
 

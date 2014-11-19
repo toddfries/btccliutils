@@ -29,6 +29,7 @@ use JSON;
 
 use OpenBSD::Getopt;
 
+our $opt_a;		# address (limit spending to inputs using this addr)
 our $opt_b;		# blacklist of txhash to not use, comma separated
 our $opt_c;		# conf file
 our $opt_o;		# output addr:pct, comma separated
@@ -38,7 +39,7 @@ our $opt_v = 0;		# verbosity
 
 $opt_c = $ENV{'HOME'}."/.spendbtc.conf";
 
-getopts('b:c:o:t:x:v');
+getopts('a:b:c:o:t:x:v');
 
 our @txblacklist;
 if (defined($opt_b)) {
@@ -102,6 +103,11 @@ foreach my $tx (@{$parsed}) {
 	}
 	foreach my $txb (@txblacklist) {
 		if ($txb eq $tx->{'txid'}) {
+			next TX;
+		}
+	}
+	if (defined($opt_a)) {
+		if ($opt_a ne $tx->{'address'}) {
 			next TX;
 		}
 	}

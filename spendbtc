@@ -66,10 +66,16 @@ if (!@outputs) {
 my $pct = 0.0;
 foreach my $o (@outputs) {
 	my ($addr,$p) = split(/:/,$o);
-	$pct += $p;
+	my $tmp = $pct + $p;
+	if ($opt_v > 0) {
+		printf "adding pct .. %0.4f + %0.4f = %0.4f\n", $pct, $p, $tmp;
+	}
+	$pct = $tmp;
 }
-if ($pct != 100.0) {
-	printf "Oops, percentage adds up to %0.2f, try again..\n",$pct;
+my $pctstr = sprintf("0.8f",$pct);
+my $pct100 = sprintf("0.8f",100.0);
+if ($pctstr ne $pct100) {
+	printf "Oops, percentage adds up to %0.8f(%s), try again..\n",$pct,$pct;
 	usage();
 }
 

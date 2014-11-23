@@ -32,14 +32,16 @@ use OpenBSD::Getopt;
 our $opt_a;		# address (limit spending to inputs using this addr)
 our $opt_b;		# blacklist of txhash to not use, comma separated
 our $opt_c;		# conf file
+our $opt_n;		# do not send tx if defined($opt_n)
 our $opt_o;		# output addr:pct, comma separated
 our $opt_t = 0.0001;	# txfee
 our $opt_x;		# external command to get at wallet rpc bits
 our $opt_v = 0;		# verbosity
+our $opt_C = 1;		# confirmation threshold, set to 0 for unconfirmed
 
 $opt_c = $ENV{'HOME'}."/.spendbtc.conf";
 
-getopts('a:b:c:o:t:x:v');
+getopts('C:a:b:c:o:t:x:v');
 
 our @txblacklist;
 if (defined($opt_b)) {
@@ -79,7 +81,7 @@ if ($pctstr ne $pct100) {
 	usage();
 }
 
-open(U,"${opt_x} listunspent|");
+open(U,"${opt_x} listunspent ${opt_C}|");
 my $line;
 my $text = "";
 while(<U>) {
@@ -218,4 +220,8 @@ open(SEND,">>","sendtx.log");
 print SEND "${opt_x} sendrawtransaction ${signedhex}\n";
 close(SEND);
 
+if (!defined($opt_n)) {
+	system("${opt_x} sendrawtransaction ${signedhex}");
+	system("./pushtx ${signedhex}");
+}
 system("${opt_x} decoderawtransaction ${signedhex}");

@@ -32,10 +32,11 @@ use OpenBSD::Getopt;
 our $opt_b;		# blacklist of txhash to not use, comma separated
 our $opt_c;		# conf file
 our $opt_v;		# verbose
+our $opt_C;		# confirmations (default 1, 0 = unconfirmed)
 
 $opt_c = $ENV{'HOME'}."/.checkbtc.conf";
 
-getopts('b:c:o:v');
+getopts('C:b:c:o:v');
 
 our @txblacklist;
 if (defined($opt_b)) {
@@ -111,7 +112,7 @@ foreach my $key (keys %walletcmds) {
 	print  "  - listunspent\n";
 	$line = undef;
 	$text = "";
-	open(U,"${opt_x} listunspent 2> /dev/null |");
+	open(U,"${opt_x} listunspent ${opt_C} 2> /dev/null |");
 	while(<U>) {
 		chomp($line = $_);
 		$text .= $line;

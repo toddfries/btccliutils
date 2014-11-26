@@ -35,13 +35,14 @@ our $opt_c;		# conf file
 our $opt_n;		# do not send tx if defined($opt_n)
 our $opt_o;		# output addr:pct, comma separated
 our $opt_t = 0.0001;	# txfee
-our $opt_x;		# external command to get at wallet rpc bits
 our $opt_v = 0;		# verbosity
 our $opt_C = 1;		# confirmation threshold, set to 0 for unconfirmed
 
+our %walletcmds;
+
 $opt_c = $ENV{'HOME'}."/.spendbtc.conf";
 
-getopts('C:a:b:c:o:t:x:v');
+getopts('C:a:b:c:no:t:x:v');
 
 our @txblacklist;
 if (defined($opt_b)) {
@@ -57,9 +58,6 @@ if ( -f $opt_c ) {
 	eval `cat $opt_c`;
 }
 
-if (!defined($opt_x)) {
-	usage();
-}
 if (!@outputs) {
 	usage();
 }
@@ -81,6 +79,14 @@ if ($pctstr ne $pct100) {
 	usage();
 }
 
+my @txsend = ();
+my $txcount = 0;
+my $txvalue = 0.00000000;
+
+my $opt_x;
+my $json = JSON->new->allow_nonref;
+foreach my $key (keys %walletcmds) {
+$opt_x = $walletcmds{$key};
 open(U,"${opt_x} listunspent ${opt_C}|");
 my $line;
 my $text = "";
@@ -90,7 +96,6 @@ while(<U>) {
 }
 close(U);
 
-my $json = JSON->new->allow_nonref;
 my $parsed = $json->decode( $text );
 
 #print $json->pretty->encode( $parsed );
@@ -100,9 +105,6 @@ if (ref($parsed) ne "ARRAY") {
 	exit(1);
 }
 
-my @txsend = ();
-my $txcount = 0;
-my $txvalue = 0.00000000;
 TX:
 foreach my $tx (@{$parsed}) {
 	if (ref($tx) ne "HASH") {
@@ -133,6 +135,7 @@ foreach my $tx (@{$parsed}) {
 }
 print "All unspent inputs total: ".$txvalue."\n";
 print "Wallets balance: ".`${opt_x} getbalance`."\n";
+}
 
 if ($txvalue == 0.0) {
 	print "0 BTC to spend, feedme!\n";
@@ -198,23 +201,37 @@ if (!defined($tmp)) {
 }
 chomp($rawtxhex = $tmp);
 
+my $lasthex = $rawtxhex;
+my $line;
+my $signedhex;
+foreach my $key (keys %walletcmds) {
+$opt_x = $walletcmds{$key};
 my $signedtx = "";
-open(S,"${opt_x} signrawtransaction ${rawtxhex}|");
-#chomp($signedtx = <S>);
+open(S,"${opt_x} signrawtransaction ${lasthex}|");
 while(<S>) {
 	chomp($line = $_);
 	$signedtx .= $line;
 #	print "S: ".$line."\n";
 }
 close(S);
-my $parsedsignedtx = $json->decode( $signedtx );
-my $signedhex = $parsedsignedtx->{'hex'};
+my $parsedsignedtx;
+eval {
+	#printf "json->decode('%s')...\n",$signedtx;
+	$parsedsignedtx = $json->decode( $signedtx );
+};
+if ($@) {
+	printf "json->decode('%s') failed: %s\n",$signedtx,$@;
+} else {
+	$signedhex = $parsedsignedtx->{'hex'};
+	$lasthex = $signedhex;
+}
 
 #open(D,"${opt_x} decoderawtransaction ${signedhex}|");
 #while(<D>) {
 #	print "D: ".$_;
 #}
 #close(D);
+}
 
 open(SEND,">>","sendtx.log");
 print SEND "${opt_x} sendrawtransaction ${signedhex}\n";

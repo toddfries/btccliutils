@@ -32,7 +32,7 @@ use OpenBSD::Getopt;
 our $opt_b;		# blacklist of txhash to not use, comma separated
 our $opt_c;		# conf file
 our $opt_v;		# verbose
-our $opt_C;		# confirmations (default 1, 0 = unconfirmed)
+our $opt_C = 1;		# confirmations (default 1, 0 = unconfirmed)
 
 $opt_c = $ENV{'HOME'}."/.checkbtc.conf";
 
@@ -173,9 +173,14 @@ foreach my $a (sort keys %addrs) {
 	if (!defined($name)) {
 		$name = $addrwallet{$a}.":?";
 	}
-	my $usd = $usdperbtc * $addrs{$a};
-	#printf "  %20s: %0.8f BTC  \$%6.2f USD  (%s)\n",$a,$addrs{$a},$usd,$name;
-	printf " %-20s... %0.8f BTC  \$%6.2f USD  (%s)\n",$name,$addrs{$a},$usd,$a;
+	my $btc = $addrs{$a};
+	if ($btc == 0 && !defined($opt_v)) {
+		next;
+	}
+		
+	my $usd = $usdperbtc * $btc;
+	#printf "  %20s: %0.8f BTC  \$%6.2f USD  (%s)\n",$a,$btc,$usd,$name;
+	printf " %-20s... %0.8f BTC  \$%6.2f USD  (%s)\n",$name,$btc,$usd,$a;
 	$total += $addrs{$a};
 }
 

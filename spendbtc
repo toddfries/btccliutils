@@ -17,6 +17,26 @@
 use warnings;
 use strict;
 
+# Selection of outputs for spending:
+#
+# using %walletcmds use listunspent to find unspent outputs, which then get
+# filered based on @txblacklist and $opt_a.
+#
+# 
+# Generation of new outputs:
+#  total - txfee - abs = amount available for percentage breakdown
+#
+#  This means there can be four scenarios:
+#
+#  1) spending an absolute amount involves $abs > 0 and $pct = 100% for change
+#
+#  2) spending all via absolute, no change, $abs + $txfee = $total, $pct = 0.0
+#
+#  3) spending percentage only involves $abs = 0
+#
+#  4) spending percentage + absolute involves $pct adds to 100% and gets what is left
+#     after $abs
+
 sub usage
 {
 	printf STDERR "must define -x <command> to access the wallet\n";
@@ -64,13 +84,23 @@ if (!@outputs) {
 
 # sanity check that it equals 100%, 1.0 = 1%
 my $pct = 0.0;
+my $abs = 0.0;
 foreach my $o (@outputs) {
 	my ($addr,$p) = split(/:/,$o);
-	my $tmp = $pct + $p;
-	if ($opt_v > 0) {
-		printf "adding pct .. %0.4f + %0.4f = %0.4f\n", $pct, $p, $tmp;
+	if ($p =~ /%/) {
+		$p =~ s/%//;
+		my $tmp = $pct + $p;
+		if ($opt_v > 0) {
+			printf "adding pct .. %0.4f + %0.4f = %0.4f\n", $pct, $p, $tmp;
+		}
+		$pct = $tmp;
+	} else {
+		my $tmp = $abs + $p;
+		if ($opt_v > 0) {
+			printf "adding abs .. %0.8f + %0.8f = %0.8f\n", $abs, $p, $tmp;
+		}
+		$abs = $tmp;
 	}
-	$pct = $tmp;
 }
 my $pctstr = sprintf("0.8f",$pct);
 my $pct100 = sprintf("0.8f",100.0);
@@ -141,6 +171,14 @@ if ($txvalue == 0.0) {
 	print "0 BTC to spend, feedme!\n";
 	exit(1);
 }
+if ($txvalue <= $abs) {
+	print "Can't overspend BTC, feedme!\n";
+	exit(1);
+}
+if ( !(($txvalue - $opt_t) == $abs) && $pct != 100.0) {
+	print "Absolute spend with leftovers, percent must be 100% for change!\n";
+	exit(1);
+}
 
 #print "Pretty view of transactions to send:\n";
 #print $json->pretty->encode( \@txsend );
@@ -167,14 +205,28 @@ my $sendtx = $str;
 my $addrs;
 my $net = $txvalue - $opt_t;
 my $sum = 0.00000000;
+my $abssum = 0.00000000;
 foreach my $o (@outputs) {
 	my ($addr,$pct) = split(/:/,$o);
+	my $amt;
+	if (!($pct =~ /%/)) {
+		$amt = $pct;
+		$addrs->{$addr} = sprintf "%0.8f",$amt;
+		$abssum += $amt;
+	}
+}
+my $absnet = $net - $abssum;
+foreach my $o (@outputs) {
+	my ($addr,$pct) = split(/:/,$o);
+	my $amt;
+	if ($pct =~ /%/) {
+		$pct =~ s/%//;
 
-	my $amt = $net*($pct/100);
+		$amt = $absnet*($pct/100);
+		$addrs->{$addr} = sprintf "%0.8f",$amt;
+		$sum += $amt;
 
-	$addrs->{$addr} = sprintf "%0.8f",$amt;
-
-	$sum += $amt;
+	} 
 }
 
 print "Compact view of dest addrs:\n";
@@ -189,7 +241,7 @@ print $str."\n";
 
 my $sendaddrs = $str;
 
-printf "Tx Fee: %0.8f\n",$txvalue-$sum;
+printf "Tx Fee: %0.8f\n",$txvalue-$sum-$abssum;
 
 my $rawtxhex;
 open(C,"${opt_x} createrawtransaction '${sendtx}' '${sendaddrs}'|");
@@ -226,11 +278,6 @@ if ($@) {
 	$lasthex = $signedhex;
 }
 
-#open(D,"${opt_x} decoderawtransaction ${signedhex}|");
-#while(<D>) {
-#	print "D: ".$_;
-#}
-#close(D);
 }
 
 open(SEND,">>","sendtx.log");
@@ -241,4 +288,9 @@ if (!defined($opt_n)) {
 	system("${opt_x} sendrawtransaction ${signedhex}");
 	system("./pushtx ${signedhex}");
 }
-system("${opt_x} decoderawtransaction ${signedhex}");
+
+open(D,"${opt_x} decoderawtransaction ${signedhex}|");
+while(<D>) {
+	print "D: ".$_;
+}
+close(D);

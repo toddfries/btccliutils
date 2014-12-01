@@ -24,8 +24,17 @@ send() {
 	if [[ "$2" == {* ]]; then
 		extra1='-H "Content-Type: application/json"'
 	fi
+	if [ "$verbose" = "1" ]; then
+		echo curl $extra0 "$url" -X POST "$extra1" -d "$data"
+	fi
 	curl $extra0 "$url" -X POST "$extra1" -d "$data"
 }
+
+verbose=0
+if [ "$1" = "-v" ]; then
+	shift
+	verbose=1
+fi
 
 while [ "$1" ]
 do

@@ -116,55 +116,55 @@ my $txvalue = 0.00000000;
 my $opt_x;
 my $json = JSON->new->allow_nonref;
 foreach my $key (keys %walletcmds) {
-$opt_x = $walletcmds{$key};
-open(U,"${opt_x} listunspent ${opt_C}|");
-my $line;
-my $text = "";
-while(<U>) {
-	chomp($line = $_);
-	$text .= $line;
-}
-close(U);
+	$opt_x = $walletcmds{$key};
+	open(U,"${opt_x} listunspent ${opt_C}|");
+	my $line;
+	my $text = "";
+	while(<U>) {
+		chomp($line = $_);
+		$text .= $line;
+	}
+	close(U);
 
-my $parsed = $json->decode( $text );
+	my $parsed = $json->decode( $text );
 
-#print $json->pretty->encode( $parsed );
+	#print $json->pretty->encode( $parsed );
 
-if (ref($parsed) ne "ARRAY") {
-	print "Error somewhere, parsed ref = ".ref($parsed)."\n";
-	exit(1);
-}
-
-TX:
-foreach my $tx (@{$parsed}) {
-	if (ref($tx) ne "HASH") {
-		print "Error somewhere, parsed tx = ".ref($tx)."\n";
+	if (ref($parsed) ne "ARRAY") {
+		print "Error somewhere, parsed ref = ".ref($parsed)."\n";
 		exit(1);
 	}
-	foreach my $txb (@txblacklist) {
-		if ($txb eq $tx->{'txid'}) {
-			next TX;
+
+	TX:
+	foreach my $tx (@{$parsed}) {
+		if (ref($tx) ne "HASH") {
+			print "Error somewhere, parsed tx = ".ref($tx)."\n";
+			exit(1);
 		}
-	}
-	if (defined($opt_a)) {
-		if ($opt_a ne $tx->{'address'}) {
-			next TX;
+		foreach my $txb (@txblacklist) {
+			if ($txb eq $tx->{'txid'}) {
+				next TX;
+			}
 		}
-	}
-	$txcount++;
-	if ($opt_v > 0) {
-		foreach my $var (sort keys %{$tx}) {
-			printf "%02d: '%s' = '%s'\n", $txcount, $var, $tx->{$var};
+		if (defined($opt_a)) {
+			if ($opt_a ne $tx->{'address'}) {
+				next TX;
+			}
 		}
+		$txcount++;
+		if ($opt_v > 0) {
+			foreach my $var (sort keys %{$tx}) {
+				printf "%02d: '%s' = '%s'\n", $txcount, $var, $tx->{$var};
+			}
+		}
+		my $txs;
+		$txs->{'txid'} = $tx->{'txid'};
+		$txs->{'vout'} = $tx->{'vout'};
+		push @txsend,$txs;
+		$txvalue += $tx->{'amount'}+0.00000000;
 	}
-	my $txs;
-	$txs->{'txid'} = $tx->{'txid'};
-	$txs->{'vout'} = $tx->{'vout'};
-	push @txsend,$txs;
-	$txvalue += $tx->{'amount'}+0.00000000;
-}
-print "All unspent inputs total: ".$txvalue."\n";
-print "Wallets balance: ".`${opt_x} getbalance`."\n";
+	print $key.": All unspent inputs total: ".$txvalue."\n";
+	print $key.": Wallets balance: ".`${opt_x} getbalance`."\n";
 }
 
 if ($txvalue == 0.0) {
@@ -257,26 +257,26 @@ my $lasthex = $rawtxhex;
 my $line;
 my $signedhex;
 foreach my $key (keys %walletcmds) {
-$opt_x = $walletcmds{$key};
-my $signedtx = "";
-open(S,"${opt_x} signrawtransaction ${lasthex}|");
-while(<S>) {
-	chomp($line = $_);
-	$signedtx .= $line;
-#	print "S: ".$line."\n";
-}
-close(S);
-my $parsedsignedtx;
-eval {
-	#printf "json->decode('%s')...\n",$signedtx;
-	$parsedsignedtx = $json->decode( $signedtx );
-};
-if ($@) {
-	printf "json->decode('%s') failed: %s\n",$signedtx,$@;
-} else {
-	$signedhex = $parsedsignedtx->{'hex'};
-	$lasthex = $signedhex;
-}
+	$opt_x = $walletcmds{$key};
+	my $signedtx = "";
+	open(S,"${opt_x} signrawtransaction ${lasthex}|");
+	while(<S>) {
+		chomp($line = $_);
+		$signedtx .= $line;
+	#	print "S: ".$line."\n";
+	}
+	close(S);
+	my $parsedsignedtx;
+	eval {
+		#printf "json->decode('%s')...\n",$signedtx;
+		$parsedsignedtx = $json->decode( $signedtx );
+	};
+	if ($@) {
+		printf "json->decode('%s') failed: %s\n",$signedtx,$@;
+	} else {
+		$signedhex = $parsedsignedtx->{'hex'};
+		$lasthex = $signedhex;
+	}
 
 }
 

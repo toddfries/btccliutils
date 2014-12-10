@@ -75,23 +75,28 @@ foreach my $key (keys %walletcmds) {
 	my $json = JSON->new->allow_nonref;
 	my $parsed;
 
-	open(U,"${opt_x} getaddressesbyaccount '' 2> /dev/null |");
+	open(U,"${opt_x} getaddressesbyaccount '' 2>&1  |");
 	while(<U>) {
 		chomp($line = $_);
 		$text .= $line;
 	}
 	close(U);
+
+	if ($text =~ /^rpcCommand:/) {
+		printf "    Error: %s\n\n",$text;
+		next;
+	}
 	eval {
 		$parsed = $json->decode( $text );
 	};
 	if ($@) {
-		print "Error: ".$@."\n";
+		printf "    json->decode('%s') Error: %s\n\n", $text, $@;
 		next;
 	}
 
 	#print $json->pretty->encode( $parsed );
 	if (ref($parsed) ne "ARRAY") {
-		print "Error somewhere, parsed ref = ".ref($parsed)."\n";
+		print "    Error somewhere, parsed ref = ".ref($parsed)."\n\n";
 		exit(1);
 	}
 
@@ -112,25 +117,30 @@ foreach my $key (keys %walletcmds) {
 	print  "  - listunspent\n";
 	$line = undef;
 	$text = "";
-	open(U,"${opt_x} listunspent ${opt_C} 2> /dev/null |");
+	open(U,"${opt_x} listunspent ${opt_C} 2>&1 |");
 	while(<U>) {
 		chomp($line = $_);
 		$text .= $line;
 	}
 	close(U);
 
+	if ($text =~ /^rpcCommand:/) {
+		printf "    Error: %s\n\n",$text;
+		next;
+	}
+
 	eval {
 		$parsed = $json->decode( $text );
 	};
 	if ($@) {
-		print "Error: ".$@."\n";
+		printf "    json->decode('%s') Error: %s\n\n", $text, $@;
 		next;
 	}
 
 	#print $json->pretty->encode( $parsed );
 
 	if (ref($parsed) ne "ARRAY") {
-		print "Error somewhere, parsed ref = ".ref($parsed)."\n";
+		print "    Error somewhere, parsed ref = ".ref($parsed)."\n\n";
 		exit(1);
 	}
 
@@ -140,7 +150,7 @@ foreach my $key (keys %walletcmds) {
 	TX:
 	foreach my $tx (@{$parsed}) {
 		if (ref($tx) ne "HASH") {
-			print "Error somewhere, parsed tx = ".ref($tx)."\n";
+			print "    Error somewhere, parsed tx = ".ref($tx)."\n\n";
 			exit(1);
 		}
 		foreach my $txb (@txblacklist) {
@@ -162,8 +172,10 @@ foreach my $key (keys %walletcmds) {
 			$addrwallet{$address} = $key;
 		}
 	}
-	print "All unspent inputs total: ".$txvalue."\n";
-	print "Wallets balance: ".`${opt_x} getbalance`."\n";
+	my $balance;
+	chomp($balance = `${opt_x} getbalance`);
+	print "  - balance: ".$balance."\n\n";
+	print "Cumulated unspent inputs total: ".$txvalue."\n\n";
 }
 
 my $total = 0.0;

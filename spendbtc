@@ -117,7 +117,7 @@ my $cmd;
 my $json = JSON->new->allow_nonref;
 foreach my $key (keys %walletcmds) {
 	$cmd = $walletcmds{$key};
-	open(U,"${cmd} listunspent ${opt_C}|");
+	open(U,"${cmd} listunspent ${opt_C} 2>&1 |");
 	my $line;
 	my $text = "";
 	while(<U>) {
@@ -125,8 +125,19 @@ foreach my $key (keys %walletcmds) {
 		$text .= $line;
 	}
 	close(U);
+	if ($text =~ /^rpcCommand:/) {
+		printf "    %s: Error: %s\n", $key, $text;
+		next;
+	}
 
-	my $parsed = $json->decode( $text );
+	my $parsed;
+	eval {
+		$parsed = $json->decode( $text );
+	};
+	if ($@) {
+		printf "%s: json->decode('%s') Error: %s\n", $key, $text, $@;
+		next;
+	}
 
 	#print $json->pretty->encode( $parsed );
 

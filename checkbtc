@@ -66,8 +66,8 @@ foreach my $name (keys %addrlist) {
 
 my %addrs;
 foreach my $key (keys %walletcmds) {
-	my $opt_x = $walletcmds{$key};
-	printf "=> %s\n", $opt_x;
+	my $cmd = $walletcmds{$key};
+	printf "=> %s\n", $cmd;
 	print  "  - getaddressbyaccount\n";
 
 	my $line;
@@ -75,7 +75,7 @@ foreach my $key (keys %walletcmds) {
 	my $json = JSON->new->allow_nonref;
 	my $parsed;
 
-	open(U,"${opt_x} getaddressesbyaccount '' 2>&1  |");
+	open(U,"${cmd} getaddressesbyaccount '' 2>&1  |");
 	while(<U>) {
 		chomp($line = $_);
 		$text .= $line;
@@ -117,7 +117,7 @@ foreach my $key (keys %walletcmds) {
 	print  "  - listunspent\n";
 	$line = undef;
 	$text = "";
-	open(U,"${opt_x} listunspent ${opt_C} 2>&1 |");
+	open(U,"${cmd} listunspent ${opt_C} 2>&1 |");
 	while(<U>) {
 		chomp($line = $_);
 		$text .= $line;
@@ -173,7 +173,7 @@ foreach my $key (keys %walletcmds) {
 		}
 	}
 	my $balance;
-	chomp($balance = `${opt_x} getbalance`);
+	chomp($balance = `${cmd} getbalance`);
 	print "  - balance: ".$balance."\n\n";
 	print "Cumulated unspent inputs total: ".$txvalue."\n\n";
 }

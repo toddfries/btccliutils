@@ -113,11 +113,11 @@ my @txsend = ();
 my $txcount = 0;
 my $txvalue = 0.00000000;
 
-my $opt_x;
+my $cmd;
 my $json = JSON->new->allow_nonref;
 foreach my $key (keys %walletcmds) {
-	$opt_x = $walletcmds{$key};
-	open(U,"${opt_x} listunspent ${opt_C}|");
+	$cmd = $walletcmds{$key};
+	open(U,"${cmd} listunspent ${opt_C}|");
 	my $line;
 	my $text = "";
 	while(<U>) {
@@ -164,7 +164,7 @@ foreach my $key (keys %walletcmds) {
 		$txvalue += $tx->{'amount'}+0.00000000;
 	}
 	print $key.": All unspent inputs total: ".$txvalue."\n";
-	print $key.": Wallets balance: ".`${opt_x} getbalance`."\n";
+	print $key.": Wallets balance: ".`${cmd} getbalance`."\n";
 }
 
 if ($txvalue == 0.0) {
@@ -244,7 +244,7 @@ my $sendaddrs = $str;
 printf "Tx Fee: %0.8f\n",$txvalue-$sum-$abssum;
 
 my $rawtxhex;
-open(C,"${opt_x} createrawtransaction '${sendtx}' '${sendaddrs}'|");
+open(C,"${cmd} createrawtransaction '${sendtx}' '${sendaddrs}'|");
 my $tmp = <C>;
 close(C);
 if (!defined($tmp)) {
@@ -257,9 +257,9 @@ my $lasthex = $rawtxhex;
 my $line;
 my $signedhex;
 foreach my $key (keys %walletcmds) {
-	$opt_x = $walletcmds{$key};
+	$cmd = $walletcmds{$key};
 	my $signedtx = "";
-	open(S,"${opt_x} signrawtransaction ${lasthex}|");
+	open(S,"${cmd} signrawtransaction ${lasthex}|");
 	while(<S>) {
 		chomp($line = $_);
 		$signedtx .= $line;
@@ -281,15 +281,15 @@ foreach my $key (keys %walletcmds) {
 }
 
 open(SEND,">>","sendtx.log");
-print SEND "${opt_x} sendrawtransaction ${signedhex}\n";
+print SEND "${cmd} sendrawtransaction ${signedhex}\n";
 close(SEND);
 
 if (!defined($opt_n)) {
-	system("${opt_x} sendrawtransaction ${signedhex}");
+	system("${cmd} sendrawtransaction ${signedhex}");
 	system("./pushtx ${signedhex}");
 }
 
-open(D,"${opt_x} decoderawtransaction ${signedhex}|");
+open(D,"${cmd} decoderawtransaction ${signedhex}|");
 while(<D>) {
 	print "D: ".$_;
 }

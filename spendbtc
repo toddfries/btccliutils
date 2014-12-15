@@ -152,13 +152,24 @@ foreach my $key (keys %walletcmds) {
 			print "Error somewhere, parsed tx = ".ref($tx)."\n";
 			exit(1);
 		}
+		if ($opt_v > 0) {
+			printf "%s: tx#%s %0.8f BTC\n", $key, $tx->{'txid'}, $tx->{'amount'};
+		}
 		foreach my $txb (@txblacklist) {
 			if ($txb eq $tx->{'txid'}) {
+				if ($opt_v > 0) {
+					printf "%s: tx#%s matched txblacklist, skipping\n",
+					    $key, $tx->{'txid'};
+				}
 				next TX;
 			}
 		}
 		if (defined($opt_a)) {
 			if ($opt_a ne $tx->{'address'}) {
+				if ($opt_v > 0) {
+					printf "%s: %s\@tx#%s != %s, skipping\n",
+					    $key, $tx->{'address'}, $tx->{'txid'}, $opt_a;
+				}
 				next TX;
 			}
 		}
@@ -270,16 +281,22 @@ my $signedhex;
 foreach my $key (keys %walletcmds) {
 	$cmd = $walletcmds{$key};
 	my $signedtx = "";
-	open(S,"${cmd} signrawtransaction ${lasthex}|");
+	open(S,"${cmd} signrawtransaction ${lasthex} 2>&1 |");
 	while(<S>) {
 		chomp($line = $_);
 		$signedtx .= $line;
 	#	print "S: ".$line."\n";
 	}
 	close(S);
+	if ($signedtx =~ /^rpcCommand/) {
+		printf "%s: signrawtransaction Error: %s\n", $key, $signedtx;
+		next;
+	}
 	my $parsedsignedtx;
 	eval {
-		#printf "json->decode('%s')...\n",$signedtx;
+		if ($opt_v > 0) {
+			printf "json->decode('%s')...\n",$signedtx;
+		}
 		$parsedsignedtx = $json->decode( $signedtx );
 	};
 	if ($@) {
@@ -296,7 +313,18 @@ print SEND "${cmd} sendrawtransaction ${signedhex}\n";
 close(SEND);
 
 if (!defined($opt_n)) {
-	system("${cmd} sendrawtransaction ${signedhex}");
+	my $line;
+	my $text = "";
+	open(C,"${cmd} sendrawtransaction ${signedhex} 2>&1 |");
+	while(<C>) {
+		chomp($line = $_);
+		$text .= $line;
+	}
+	close(C);
+	if ($text =~ /^rpcCommand/) {
+		printf "signrawtransaction Error: %s\n", $text;
+		exit(1);
+	}
 	system("./pushtx ${signedhex}");
 }
 

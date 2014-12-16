@@ -1,0 +1,43 @@
+#!/bin/ksh
+
+# Copyright (c) 2014 Todd T. Fries <todd@fries.net>
+#
+# Permission to use, copy, modify, and distribute this software for any
+# purpose with or without fee is hereby granted, provided that the above
+# copyright notice and this permission notice appear in all copies.
+#
+# THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+# WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+# MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+# ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+# WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+# ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+# OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+delay=30
+cmd="btcctl"
+mailaddr=""
+minconf="1"
+while [ "$1" ]
+do
+	case "$1" in
+	-t) shift; delay="$1";;
+	-c) shift; cmd="$1";;
+	-m) shift; mailaddr="$1";;
+	-C) shift; minconf="$1";;
+	*) break;;
+	esac
+	shift
+done
+
+tx="$1"
+while [ $($cmd gettransaction $tx|awk '/confirmations/{sub(",","");print $2}') -lt $minconf ]
+do
+	sleep $delay
+done
+td=$(mktemp -d /tmp/watchtx.XXXXXXXXXXXXXXX)
+$cmd gettransaction $tx > $td/txinfo
+[ "$mailaddr" ] && mail -s "initiate transfer from coinbase for fdc" $mailaddr < $td/txinfo
+xterm -e less $td/txinfo
+rm -rf $td
+exit 0

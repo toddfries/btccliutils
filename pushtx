@@ -44,8 +44,12 @@ do
 	echo -n "=> helloblock.io: "
 	send https://mainnet.helloblock.io/v1/transactions "rawTxHex=$1"
 
+	if false; then
+ 	# "Sorry, function disabled. Contact wizkid057 directly if you need
+	#  a transaction mined."
 	echo -n "=> eligius.st: "
 	send http://eligius.st/~wizkid057/newstats/pushtxn.php "transaction=$1&send=Push"
+	fi
 
 	echo -n "=> coins.assembly.com: "
 	send https://coins.assembly.com/v1/transactions '{"transaction_hex": "'"$1\"}"

@@ -290,6 +290,7 @@ foreach my $key (keys %walletcmds) {
 	close(S);
 	if ($signedtx =~ /^rpcCommand/) {
 		printf "%s: signrawtransaction Error: %s\n", $key, $signedtx;
+		decoderaw($cmd, $lasthex);
 		next;
 	}
 	my $parsedsignedtx;
@@ -301,6 +302,7 @@ foreach my $key (keys %walletcmds) {
 	};
 	if ($@) {
 		printf "json->decode('%s') failed: %s\n",$signedtx,$@;
+		decoderaw($cmd, $signedtx);
 	} else {
 		$signedhex = $parsedsignedtx->{'hex'};
 		$lasthex = $signedhex;
@@ -323,13 +325,19 @@ if (!defined($opt_n)) {
 	close(C);
 	if ($text =~ /^rpcCommand/) {
 		printf "signrawtransaction Error: %s\n", $text;
+		decoderaw($cmd, $signedhex);
 		exit(1);
 	}
 	system("./pushtx ${signedhex}");
 }
 
-open(D,"${cmd} decoderawtransaction ${signedhex}|");
-while(<D>) {
-	print "D: ".$_;
-}
+decoderaw($cmd,$signedhex);
 close(D);
+
+sub decoderaw {
+	my ($cmd, $rawtx) = @_;
+	open(D,"${cmd} decoderawtransaction ${rawtx}|");
+	while(<D>) {
+		print "D: ".$_;
+	}
+}

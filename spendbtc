@@ -22,7 +22,7 @@ use strict;
 # using %walletcmds use listunspent to find unspent outputs, which then get
 # filered based on @txblacklist and $opt_a.
 #
-# 
+#
 # Generation of new outputs:
 #  total - txfee - abs = amount available for percentage breakdown
 #
@@ -75,6 +75,9 @@ if (defined($opt_o)) {
 }
 
 if ( -f $opt_c ) {
+	if ($opt_v > 0) {
+		print "Parsing ".$opt_c."\n";
+	}
 	eval `cat $opt_c`;
 }
 
@@ -117,6 +120,9 @@ my $cmd;
 my $json = JSON->new->allow_nonref;
 foreach my $key (keys %walletcmds) {
 	$cmd = $walletcmds{$key};
+	if ($opt_v > 0) {
+		print " ".$key.": ".$cmd;
+	}
 	open(U,"${cmd} listunspent ${opt_C} 2>&1 |");
 	my $line;
 	my $text = "";
@@ -198,7 +204,7 @@ if ($txvalue <= $abs) {
 	exit(1);
 }
 if ( !(($txvalue - $opt_t) == $abs) && $pct != 100.0) {
-	print "Absolute spend with leftovers, percent must be 100% for change!\n";
+	printf "Absolute spend with leftovers (%0.2f%%), percent must be 100%% for change!\n",$pct;
 	exit(1);
 }
 
@@ -248,7 +254,7 @@ foreach my $o (@outputs) {
 		$addrs->{$addr} = sprintf "%0.8f",$amt;
 		$sum += $amt;
 
-	} 
+	}
 }
 
 print "Compact view of dest addrs:\n";

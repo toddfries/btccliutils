@@ -20,7 +20,7 @@ use strict;
 # Selection of outputs for spending:
 #
 # using %walletcmds use listunspent to find unspent outputs, which then get
-# filered based on @txblacklist and $opt_a.
+# filered based on @txblacklist and @txaddrs
 #
 #
 # Generation of new outputs:
@@ -49,7 +49,7 @@ use JSON;
 
 use OpenBSD::Getopt;
 
-our $opt_a;		# address (limit spending to inputs using this addr)
+our @txaddrs;		# addresses (limit spending to inputs using these addrs)
 our $opt_b;		# blacklist of txhash to not use, comma separated
 our $opt_c;		# conf file
 our $opt_n;		# do not send tx if defined($opt_n)
@@ -170,12 +170,19 @@ foreach my $key (keys %walletcmds) {
 				next TX;
 			}
 		}
-		if (defined($opt_a)) {
-			if ($opt_a ne $tx->{'address'}) {
+		if (@txaddrs) {
+			my $found = 0;
+			foreach my $addr (@txaddrs) {
+				if ($addr eq $tx->{'address'}) {
+					$found = 1;
+					last;
+				}
 				if ($opt_v > 0) {
 					printf "%s: %s\@tx#%s != %s, skipping\n",
-					    $key, $tx->{'address'}, $tx->{'txid'}, $opt_a;
+					    $key, $tx->{'address'}, $tx->{'txid'}, $addr;
 				}
+			}
+			if ($found < 1) {
 				next TX;
 			}
 		}
@@ -203,8 +210,16 @@ if ($txvalue <= $abs) {
 	print "Can't overspend BTC, feedme!\n";
 	exit(1);
 }
-if ( !(($txvalue - $opt_t) == $abs) && $pct != 100.0) {
-	printf "Absolute spend with leftovers (%0.2f%%), percent must be 100%% for change!\n",$pct;
+$pctstr = sprintf "%0.8f", $pct;
+my $onestr = sprintf "%0.8f", 100.0;
+if ( !(($txvalue - $opt_t) == $abs) && $pctstr ne $onestr) {
+	my $intro;
+	if ($abs > 0) {
+		$intro = "Absolute spend";
+	} else {
+		$intro = "Spend";
+	}
+	printf "%s with leftovers (%0.4f%% - 100%% = %0.4f%%), percent must be 100%% for change!\n",$intro,$pct,100.0-$pct;
 	exit(1);
 }
 

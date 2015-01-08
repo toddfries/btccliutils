@@ -178,7 +178,9 @@ foreach my $key (keys %walletcmds) {
 	print "Cumulated unspent inputs total: ".$txvalue."\n\n";
 }
 
-my $total = 0.0;
+our $total = 0.0;
+
+my $info;
 
 foreach my $a (sort keys %addrs) {
 	my $name = $addrname{$a};
@@ -189,11 +191,41 @@ foreach my $a (sort keys %addrs) {
 	if ($btc == 0 && !defined($opt_v)) {
 		next;
 	}
-		
-	my $usd = $usdperbtc * $btc;
-	#printf "  %20s: %0.8f BTC  \$%6.2f USD  (%s)\n",$a,$btc,$usd,$name;
-	printf " %-20s... %0.8f BTC  \$%6.2f USD  (%s)\n",$name,$btc,$usd,$a;
-	$total += $addrs{$a};
+	my $namelhs;
+	my $namerhs;
+	$name =~ m/^(.*):(.*)$/;
+	$namelhs = $1;
+	$namerhs = $2;
+
+	if (!defined($namelhs)) {
+		showinfo($a,$btc,$name);
+		next;
+	}
+	if (!defined($info->{$namelhs}->{'btc'})) {
+		$info->{$namelhs}->{'btc'} = 0.0;
+	}
+	$info->{$namelhs}->{'btc'} += $btc;
+
+	if (!defined($info->{$namelhs}->{$namerhs}->{'btc'})) {
+		$info->{$namelhs}->{$namerhs}->{'btc'} = 0.0;
+	}
+	$info->{$namelhs}->{$namerhs}->{'btc'} += $btc;
+}
+
+foreach my $name (sort keys %{$info}) {
+	foreach my $subname (sort keys %{$info->{$name}}) {
+		next if ($subname eq 'btc');
+		showinfo('cumulative',$info->{$name}->{$subname}->{'btc'},"${name}:${subname}");
+	}
 }
 
 printf " %-20s... %0.8f BTC  \$%6.2f USD\n","TOTAL",$total,$total * $usdperbtc;
+
+sub showinfo {
+	my ($a, $btc, $name) = @_;
+
+	my $usd = $usdperbtc * $btc;
+	#printf "  %20s: %0.8f BTC  \$%6.2f USD  (%s)\n",$a,$btc,$usd,$name;
+	printf " %-20s... %0.8f BTC  \$%6.2f USD  (%s)\n",$name,$btc,$usd,$a;
+	$total += $btc;
+}

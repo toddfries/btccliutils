@@ -16,6 +16,6 @@
 
 for addr in $@
 do
-	ftp -o - "https://blockchain.info/address/$addr"?format=json"
+	ftp -o - "https://blockchain.info/address/$addr?format=json"
 	sleep 2
-done 2>&1 | egrep "address|final"
+done 2>&1 | egrep "address|total_|final"

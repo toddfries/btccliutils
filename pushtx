@@ -24,10 +24,13 @@ send() {
 	if [[ "$2" == {* ]]; then
 		extra1='-H "Content-Type: application/json"'
 	fi
+	echo ",-----> $url"
 	if [ "$verbose" = "1" ]; then
 		echo curl $extra0 "$url" -X POST "$extra1" -d "$data"
 	fi
 	curl $extra0 "$url" -X POST "$extra1" -d "$data"
+	echo
+	echo "\`-----> $url"
 }
 
 verbose=0
@@ -38,10 +41,10 @@ fi
 
 while [ "$1" ]
 do
-	echo -n "=> blockchain.info: "
+	echo "=> blockchain.info: "
 	send https://blockchain.info/pushtx "tx=$1"
 
-	echo -n "=> helloblock.io: "
+	echo "=> helloblock.io: "
 	send https://mainnet.helloblock.io/v1/transactions "rawTxHex=$1"
 
 	if false; then
@@ -51,10 +54,13 @@ do
 	send http://eligius.st/~wizkid057/newstats/pushtxn.php "transaction=$1&send=Push"
 	fi
 
-	echo -n "=> coins.assembly.com: "
+	echo "=> coins.assembly.com: "
 	send https://coins.assembly.com/v1/transactions '{"transaction_hex": "'"$1\"}"
 
-	echo -n "=> blockr.io: "
+	#echo "=> https://coinb.in/: "
+	#send https://coinb.in/
+
+	echo "=> blockr.io: "
 	send https://btc.blockr.io/api/v1/tx/push '{"hex":"'"$1\"}"
 	shift
 done

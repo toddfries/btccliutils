@@ -49,6 +49,7 @@ use JSON;
 
 use OpenBSD::Getopt;
 
+our $usdperbtc = 256.0; # random value, over-ride in config
 our @txaddrs;		# addresses (limit spending to inputs using these addrs)
 our $opt_b;		# blacklist of txhash to not use, comma separated
 our $opt_c;		# conf file
@@ -97,6 +98,13 @@ foreach my $o (@outputs) {
 			printf "adding pct .. %0.4f + %0.4f = %0.4f\n", $pct, $p, $tmp;
 		}
 		$pct = $tmp;
+	} elsif ($p =~ /usd$/i) {
+		$p =~ s/usd//i;
+		my $btc = $p * (1/$usdperbtc);
+		if ($opt_v > 0) {
+			printf "adding usd .. %0.2f usd -> %0.8fi btc\n", $p, $btc;
+		}
+		$abs += $btc;
 	} else {
 		my $tmp = $abs + $p;
 		if ($opt_v > 0) {
@@ -249,15 +257,34 @@ my $addrs;
 my $net = $txvalue - $opt_t;
 my $sum = 0.00000000;
 my $abssum = 0.00000000;
+
+# handle absolute btc amounts
 foreach my $o (@outputs) {
 	my ($addr,$pct) = split(/:/,$o);
 	my $amt;
-	if (!($pct =~ /%/)) {
-		$amt = $pct;
-		$addrs->{$addr} = sprintf "%0.8f",$amt;
-		$abssum += $amt;
+	if ($pct =~ /(%|usd)/i) {
+		next;
 	}
+	$amt = $pct;
+	$addrs->{$addr} = sprintf "%0.8f",$amt;
+	$abssum += $amt;
 }
+
+# handle absolute usd amounts converted to btc
+foreach my $o (@outputs) {
+	my ($addr,$pct) = split(/:/,$o);
+	my $usd;
+	if (! ($pct =~ /usd/i)) {
+		next;
+	}
+	$usd = $pct;
+	$usd =~ s/usd//i;
+	my $btc = $usd * (1/$usdperbtc);
+	$addrs->{$addr} = sprintf "%0.8f",$btc;
+	$abssum += $btc;
+}
+
+# handle remainder as percentages (if any)
 my $absnet = $net - $abssum;
 foreach my $o (@outputs) {
 	my ($addr,$pct) = split(/:/,$o);

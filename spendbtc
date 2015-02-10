@@ -53,6 +53,7 @@ our $usdperbtc = 256.0; # random value, over-ride in config
 our @txaddrs;		# addresses (limit spending to inputs using these addrs)
 our $opt_b;		# blacklist of txhash to not use, comma separated
 our $opt_c;		# conf file
+our $opt_m;		# minimum amount to include
 our $opt_n;		# do not send tx if defined($opt_n)
 our $opt_o;		# output addr:pct, comma separated
 our $opt_t = 0.0001;	# txfee
@@ -63,7 +64,7 @@ our %walletcmds;
 
 $opt_c = $ENV{'HOME'}."/.spendbtc.conf";
 
-getopts('C:a:b:c:no:t:x:v');
+getopts('C:a:b:c:m:no:t:x:v');
 
 our @txblacklist;
 if (defined($opt_b)) {
@@ -177,6 +178,9 @@ foreach my $key (keys %walletcmds) {
 				}
 				next TX;
 			}
+		}
+		if (defined($opt_m) && $tx->{'amount'} < $opt_m) {
+			next TX;
 		}
 		if (@txaddrs) {
 			my $found = 0;

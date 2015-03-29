@@ -1,0 +1,170 @@
+#!/usr/bin/perl
+
+# Copyright (c) 2015 Todd T. Fries <todd@fries.net>
+#
+# Permission to use, copy, modify, and distribute this software for any
+# purpose with or without fee is hereby granted, provided that the above
+# copyright notice and this permission notice appear in all copies.
+#
+# THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+# WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+# MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+# ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+# WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+# ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+# OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+use strict;
+use warnings;
+
+use Getopt::Std;
+use JSON;
+
+my $configfile = $ENV{'HOME'}."/.havelock.conf";
+
+our $opt_f; # config file
+our $opt_a; # select account to limit activity
+our $opt_t; # show transaction history
+our $opt_T; # transaction type
+our $opt_v=0; # verbose
+getopts('a:f:T:t:v');
+
+if (defined($opt_a) && $opt_v > 0) {
+	printf STDERR "opt_a = '%s'\n",$opt_a;
+}
+
+if (defined($opt_f) && -f $opt_f) {
+	$configfile = $opt_f;
+}
+
+if (! -f $configfile) {
+	print STDERR "No config file present, bailing!\n";
+	exit(1);
+}
+
+my %acct;
+
+open(CONFIG, $configfile);
+while(<CONFIG>) {
+	my $line;
+	chomp($line = $_);
+	if ($line =~ /^([a-z][A-Za-z0-9]+)\s*=\s*(.*)$/) {
+		my ($var,$val) = ($1,$2);
+		$val =~ s/#.*$//g;
+		if ($var =~ /^user([a-z][a-zA-Z0-9]+)$/) {
+			$var =~ s/^user//;
+			if (defined($opt_a) && $var ne $opt_a) {
+				if ($opt_v > 0) {
+				printf STDERR "opt_a('%s') !matched var('%s')\n",
+					    $opt_a,$var;
+				}
+				next;
+			} else {
+				if (defined($opt_a) && $opt_v > 0) {
+					printf STDERR "opt_a('%s') matched var('%s')\n",
+					    $opt_a,$var;
+				}
+			}
+			if ($opt_v > 0) {
+				printf STDERR "set acct{'%s'} = '%s'\n", $var, $val;
+			}
+			$acct{$var} = $val;
+			next;
+		}
+		printf STDERR "Unhandled line: '%s' -> var '%s', val '%s'\n",
+		    $line, $var, $val;
+		next;
+	}
+	printf STDERR "Unhandled line: '%s'\n", $line;
+}
+
+my $json = JSON->new->allow_nonref;
+foreach my $a (sort keys %acct) {
+	printf "User %s\n", $a;
+	if (defined($opt_t)) {
+		my $xtra = " -d sort=DESC";
+		if ($opt_t > 0) {
+			$xtra = " -d limit=${opt_t}";
+		}
+		callapi("transactions",$acct{$a},$xtra,0);
+	}
+	callapi("balance",$acct{$a});
+	callapi("portfolio",$acct{$a});
+}
+
+sub callapi {
+	my ($cmd, $key, $xtra, $txid) = @_;
+	if (!defined($xtra)) {
+		$xtra="";
+	}
+	if (defined($txid)) {
+		$xtra =~ s/ -d sinceid=[0-9]+//g;
+		$xtra .= " -d sinceid=".$txid;
+	}
+	my $call = sprintf "curl -s -X POST https://www.havelockinvestments.com/r/%s -d key=%s%s",$cmd,$key,$xtra;
+	if ($opt_v > 0) {
+		print "callapi: ",$call,"\n";
+	}
+	open(CURL,"$call 2> /dev/null |");
+	my $text = "";
+	while(<CURL>) {
+		$text .= $_;
+	}
+	close(CURL);
+
+	my $parsed = $json->decode($text);
+	if ($cmd eq "transactions") {
+		my ($id,$count) = showtx($parsed);
+		callapi($cmd, $key, $xtra, $id);
+		
+		return;
+	}
+	print $json->pretty->encode( $parsed );
+}
+sub showtx {
+	my ($tx) = @_;
+	#printf "showtx: tx is a %s\n",ref($tx);
+	if (!(defined($tx->{status}) && $tx->{status} eq "ok")) {
+		return;
+	}
+	if (!defined($tx->{transactions})) {
+		return;
+	}
+	if (ref($tx->{transactions}) ne "ARRAY") {
+		return;
+	}
+	my $count = 0;
+	my $total = 0.0;
+	my $maxid = 0;
+	my $Tcount = 0;
+	foreach my $th (sort {$a->{dt} cmp $b->{dt}} @{$tx->{transactions}}) {
+		$count++;
+		#printf "showtx: transaction%d is a %s: '%s'\n",$count,ref($th),$th;
+		if (defined($opt_T)) {
+			#printf "showtx: comparing %s with %s\n", $th->{type}, $opt_T;
+			if (!($th->{type} eq $opt_T)) {
+				next;
+			}
+		}
+		if ($th->{id} > $maxid) {
+			$maxid = $th->{id};
+		}
+		if (defined($opt_T) && ($opt_T eq "deposit" || $opt_T eq "withdraw")) {
+			$total += $th->{amount};
+			$Tcount++;
+			printf "showtx: %d %s %0.8f BTC at %s\n", $th->{id}, $opt_T, $th->{amount}, $th->{dt};
+			next;
+		}
+		foreach my $t (sort keys %{$th}) {
+			my $val = $th->{$t};
+			if (!defined($val)) {
+				$val = "<undef>";
+			}
+			printf "showtx: th->{%s} = '%s'\n",$t,$val;
+		}
+	}
+	if (defined($opt_T) && ($opt_T eq "deposit" || $opt_T eq "withdraw")) {
+		printf "showtx: %d tx, %d %s, total %s is %0.8f\n", $count, $Tcount, $opt_T, $opt_T, $total;
+	}
+	return ($maxid,$count);
+}

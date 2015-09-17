@@ -1,0 +1,80 @@
+#!/bin/ksh
+
+# Copyright (c) 2015 Todd T. Fries <todd@fries.net>
+#
+# Permission to use, copy, modify, and distribute this software for any
+# purpose with or without fee is hereby granted, provided that the above
+# copyright notice and this permission notice appear in all copies.
+#
+# THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+# WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+# MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+# ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+# WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+# ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+# OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+user="$1"
+
+bail=0
+if [ "$(egrep "^${user}:" /etc/passwd)" ]; then
+	echo "$user already exists, bailing"
+	bail=1
+fi
+if ! [ "$(id -u)" = "0" ]; then
+	echo "uid != 0, bailing"
+	bail=1
+fi
+if [ bail -gt 0 ]; then
+	exit $bail
+fi
+
+skeldir=/etc/skel.btcwallet
+if ! [ -d $skeldir ]; then
+	umask 077
+	mkdir -p $skeldir.tmp/.btcwallet
+	:> $skeldir.tmp/.btcwallet/btcwallet.conf
+	mv $skeldir.tmp $skeldir
+fi
+useradd -m -g=uid -r 800..1000 -k $skeldir -d /home/coins/$user -s /sbin/nologin $user
+id=$(awk -F: "/^${user}:/{print \$3}" /etc/passwd)
+rpcport=$((id-800+8332))
+proport=$((id-800+6062))
+username=$(pwgen -s 16 1)
+password=$(pwgen -s 64 1)
+btcdusername=guest
+btcdpassword=guest
+cat <<EOF | sed -e "s/%rpcport%/$rpcport/g" \
+	-e "s/%proport%/$proport/g" \
+	-e "s/%username%/$username/g" \
+	-e "s/%password%/$password/g" \
+	-e "s/%btcdusername%/$btcdusername/g" \
+	-e "s/%btcdpassword%/$btcdpassword/g" \
+	> /home/coins/${user}/.btcwallet/btcwallet.conf
+[Application Options]
+mainnet=1
+rpclisten=[::1]:%rpcport%
+username=%username%
+password=%password%
+btcdusername=%btcdusername%
+btcdpassword=%btcdpassword%
+rpcconnect=[::1]:8338
+profile=%proport%
+cafile=~/.btcwallet/cv.cert
+EOF
+
+echo "Created wallet with user $user($id)..."
+echo
+echo "btcwallet.conf:"
+cat /home/coins/${user}/.btcwallet/btcwallet.conf
+shortuser=$user
+shortuser=${shortuser%*wallet}
+shortuser=${shortuser#_}
+sed \
+	-e "s/user1wallet/${user}/g" \
+	-e "s/mainnet/'${shortuser}(main)'/" \
+	../btcutils/rc.d/btcwallet \
+	> /etc/rc.d/btcwallet${user}
+chmod 755 /etc/rc.d/btcwallet${user}
+su -m $user -c "unset TMPDIR; HOME=~${user} ~todd/go/bin/btcwallet --create"
+/etc/rc.d/btcwallet${user} -d start

@@ -1,0 +1,3 @@
+checkbtc:
+ - sum common strings together, list addresses if verbose mode
+ - split <wallet>:<description> and group <wallet> items

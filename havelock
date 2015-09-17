@@ -115,6 +115,12 @@ sub callapi {
 	my $parsed = $json->decode($text);
 	if ($cmd eq "transactions") {
 		my ($id,$count) = showtx($parsed);
+		if (!defined($id) || !defined($txid)) {
+			return;
+		}
+		if ($id == $txid) {
+			return;
+		}
 		callapi($cmd, $key, $xtra, $id);
 		
 		return;
@@ -133,6 +139,7 @@ sub showtx {
 	if (ref($tx->{transactions}) ne "ARRAY") {
 		return;
 	}
+	printf "showtx: tx=%s\n", $tx;
 	my $count = 0;
 	my $total = 0.0;
 	my $maxid = 0;

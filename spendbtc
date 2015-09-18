@@ -91,7 +91,7 @@ if (!@outputs) {
 my $pct = 0.0;
 my $abs = 0.0;
 foreach my $o (@outputs) {
-	my ($addr,$p) = split(/:/,$o);
+	my ($addr,$p,$min) = split(/:/,$o);
 	if ($p =~ /%/) {
 		$p =~ s/%//;
 		my $tmp = $pct + $p;
@@ -264,7 +264,7 @@ my $abssum = 0.00000000;
 
 # handle absolute btc amounts
 foreach my $o (@outputs) {
-	my ($addr,$pct) = split(/:/,$o);
+	my ($addr,$pct,$min) = split(/:/,$o);
 	my $amt;
 	if ($pct =~ /(%|usd)/i) {
 		next;
@@ -276,7 +276,7 @@ foreach my $o (@outputs) {
 
 # handle absolute usd amounts converted to btc
 foreach my $o (@outputs) {
-	my ($addr,$pct) = split(/:/,$o);
+	my ($addr,$pct,$min) = split(/:/,$o);
 	my $usd;
 	if (! ($pct =~ /usd/i)) {
 		next;
@@ -291,15 +291,21 @@ foreach my $o (@outputs) {
 # handle remainder as percentages (if any)
 my $absnet = $net - $abssum;
 foreach my $o (@outputs) {
-	my ($addr,$pct) = split(/:/,$o);
+	my ($addr,$pct,$min) = split(/:/,$o);
 	my $amt;
 	if ($pct =~ /%/) {
 		$pct =~ s/%//;
 
 		$amt = $absnet*($pct/100);
+		if ($amt < $min) {
+			printf "entry '%s' has a minimum. ".
+			    "%0.8f * %0.4f%% = %0.8f .. is < %0.8f. ".
+			    "disabling transmission!\n",
+			    $absnet, $pct/100, $amt, $min;
+			$opt_n=1;
+		}
 		$addrs->{$addr} = sprintf "%0.8f",$amt;
 		$sum += $amt;
-
 	}
 }
 

@@ -39,8 +39,17 @@ use strict;
 
 sub usage
 {
-	printf STDERR "must define -x <command> to access the wallet\n";
-	printf STDERR "must define -o <addr>:pct[,addr:pct] to send funds\n";
+	print STDERR "must define -x <command> to access the wallet\n";
+	print STDERR "must define -o <output>[,<output>[,...]] send funds\n";
+	print STDERR "  <output> := <btc addr>:<pct% | amt [<currency>]>[:".
+	    "<min BTC>]\n";
+	print STDERR "\nFor example:\n";
+	print STDERR "\t-o 12345...:10%,12346...:20%,12347...:70%:.001,".
+	    "12348...:10USD\n";
+	print STDERR "\nThe above example takes \$10USD and then divides the\n";
+	print STDERR "rest percentage wise as specified.  If \$10USD is not\n";
+	print STDERR "available or the optional minimum is specified and not\n";
+	print STDERR "met, the transaction will not be sent.\n";
 	exit(1);
 }
 
@@ -288,8 +297,15 @@ foreach my $o (@outputs) {
 	$abssum += $btc;
 }
 
-# handle remainder as percentages (if any)
 my $absnet = $net - $abssum;
+
+if ($absnet < 0) {
+	printf STDERR "Absolute values went negative by %0.8f, bailing!\n",
+	    $absnet;
+	exit(1);
+}
+
+# handle remainder as percentages (if any)
 foreach my $o (@outputs) {
 	my ($addr,$pct,$min) = split(/:/,$o);
 	my $amt;

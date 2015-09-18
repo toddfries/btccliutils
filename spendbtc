@@ -297,11 +297,11 @@ foreach my $o (@outputs) {
 		$pct =~ s/%//;
 
 		$amt = $absnet*($pct/100);
-		if ($amt < $min) {
-			printf "entry '%s' has a minimum. ".
+		if (defined($min) && $amt < $min) {
+			printf "output '%s' has a minimum. ".
 			    "%0.8f * %0.4f%% = %0.8f .. is < %0.8f. ".
 			    "disabling transmission!\n",
-			    $absnet, $pct/100, $amt, $min;
+			    $o, $absnet, $pct/100, $amt, $min;
 			$opt_n=1;
 		}
 		$addrs->{$addr} = sprintf "%0.8f",$amt;

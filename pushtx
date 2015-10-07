@@ -61,6 +61,6 @@ do
 	#send https://coinb.in/
 
 	echo "=> blockr.io: "
-	send https://btc.blockr.io/api/v1/tx/push '{"hex":"'"$1\"}"
+	send https://btc.blockr.io/api/v1/tx/push "{\"hex\":\"$1\"}"
 	shift
 done

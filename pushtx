@@ -44,10 +44,11 @@ do
 	echo "=> blockchain.info: "
 	send https://blockchain.info/pushtx "tx=$1"
 
+	if false; then
+	# domain does not resolve
 	echo "=> helloblock.io: "
 	send https://mainnet.helloblock.io/v1/transactions "rawTxHex=$1"
 
-	if false; then
  	# "Sorry, function disabled. Contact wizkid057 directly if you need
 	#  a transaction mined."
 	echo -n "=> eligius.st: "

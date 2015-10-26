@@ -135,7 +135,9 @@ my @txsend = ();
 my $txcount = 0; # revisit, may need 'our' but not for now
 our $txvalue = 0.00000000;
 
-my $cmd;
+our $cmd;
+# XXX make this per wallet and global, not just global
+our ($confold,$confnew,$confavg,$gtxcount) = (undef,undef,0,0);
 my $json = JSON->new->allow_nonref;
 foreach my $key (keys %walletcmds) {
 	$cmd = $walletcmds{$key};
@@ -217,13 +219,16 @@ foreach my $key (keys %walletcmds) {
 		my $txs;
 		$txs->{'txid'} = $tx->{'txid'};
 		$txs->{'vout'} = $tx->{'vout'};
-		# $tx->{'conf'} = getconf($tx->{'txid'});
+		$txs->{'conf'} = getconf($tx->{'txid'});
+		$txs->{'amt'}  = $tx->{'amount'};
 		push @txsend,$txs;
 		$txvalue += $tx->{'amount'}+0.00000000;
 	}
 	print $key.": All unspent inputs total: ".$txvalue."\n";
 	print $key.": Wallets balance: ".`${cmd} getbalance`."\n";
 }
+printf "Globally considered %d tx, youngest %d count, oldest %d count, avg %f\n",
+	$gtxcount, $confnew, $confold, $confavg;
 
 if ($txvalue == 0.0) {
 	print "0 BTC to spend, feedme!\n";
@@ -265,8 +270,22 @@ my $roundsize = sprintf("%0.0f",( ($size+499) / 1000)) * 1000;
 #   if 'priority' > 57,600,000 .. fee free tx!
 #my $priority = ($input1 * $input1confcount + $input2*$input2confcount)/$size;
 
-#my $priority = $priorityconf / $size;
-#if ($priority > 57600000) {
+if ($priorityconf > 0) {
+	my $priority = $priorityconf / $size;
+	printf "Tx priority is %f / %d = %f, to be free it needs to be 57600000, need %f more\n",
+		$priorityconf, $size, $priority, 57600000 - $priority;
+	if ($priority > 57600000) {
+		printf "Woah there, we can send this for free, high priority tx!\n";
+		printf "Over-riding fee to be 0\n";
+		$fee = 0.0;
+	}
+}
+
+
+# XXX show how much more btc would be required to make this calculation meet
+#     the 'all outputs are .01BTC or greater' requirement
+# XXX show how much time would be required to make this calculation meet the
+#     priority requirement wrt input age (how many more blocks before fee free)
 if ($fee > $opt_t) {
 	print "\n";
 	printf "Recalculating tx with %0.8f per byte in mind\n",$feepb;
@@ -362,10 +381,28 @@ sub calctx {
 				$str .= sprintf "\"txid\":\"%s\",",$tx->{$v};
 				next;
 			}
-			$str .= sprintf "\"vout\":%d",$tx->{$v};
+			if ($v eq "vout") {
+				$str .= sprintf "\"vout\":%d",$tx->{$v};
+				last;
+			}
 		}
-		$str .= "},"
-		# $priorityconf += $tx->{'conf'} * $tx->{'amt'};
+		$str .= "},";
+		my ($txconfcount, $txamt) = ($tx->{'conf'}, $tx->{'amt'});
+		if (defined($txconfcount) && defined($txamt) && $txconfcount > 0) {
+			my $prio = $tx->{'conf'} * $tx->{'amt'};
+			if ($opt_v > 0) {
+				printf "%s priority is %d * %f = %f\n",
+				    $tx->{'txid'}, $tx->{'conf'}, $tx->{'amt'}, $prio;
+			}
+			$priorityconf += $prio;
+		} else {
+			if (!defined($txconfcount)) {
+				printf "%s: 'conf' not defined\n", $tx->{'txid'};
+			}
+			if (!defined($txamt)) {
+				printf "%s: 'amt' not defined\n", $tx->{'txid'};
+			}
+		}
 	}
 	$str =~ s/,$//;
 	$str .= "]";
@@ -457,4 +494,36 @@ sub calctx {
 	chomp($rawtxhex = $tmp);
 
 	return ($rawtxhex,$priorityconf);
+}
+sub getconf {
+	my ($txid) = @_;
+	my $line;
+	my $confcount = 0;
+
+	open(C,"$cmd gettransaction $txid 2>&1 |");
+	while(<C>) {
+		chomp($line=$_);
+		if ($line =~ /"confirmations": ([0-9]+),/) {
+			$confcount = $1;
+			last;
+		}
+	}
+	close(C);
+	if ($opt_v > 0) {
+		printf "getconf: %s -> %d confirmations\n", $txid, $confcount;
+	}
+	if (!defined($confold) || $confcount > $confold) {
+		$confold = $confcount;
+	}
+	if (!defined($confnew) || $confcount < $confnew) {
+		$confnew = $confcount;
+	}
+	my $tmptxcount = $gtxcount;
+	$gtxcount++;
+	if ($gtxcount == 1) {
+		$confavg = $confcount;
+	} else {
+		$confavg = ($confavg * $tmptxcount + $confcount) / $gtxcount;
+	}
+	return $confcount;
 }

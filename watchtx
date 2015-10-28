@@ -31,10 +31,20 @@ do
 done
 
 tx="$1"
+
+if ! [ "$tx" ]; then
+	echo "No tx arg, bailing"
+	exit 1
+fi
+echo "Watching txid $tx"
 lastconf=0
 while :
 do
 	confirmations=$($cmd gettransaction $tx|awk '/confirmations/{sub(",","");print $2}')
+	if ! [ "$confirmations" ]; then
+		echo "Error reading confirmations, bailing"
+		exit 1
+	fi
 	if [ $confirmations -ge $minconf ]; then
 		break
 	fi
@@ -48,7 +58,7 @@ do
 done
 td=$(mktemp -d /tmp/watchtx.XXXXXXXXXXXXXXX)
 $cmd gettransaction $tx > $td/txinfo
-[ "$mailaddr" ] && mail -s "initiate transfer from coinbase for fdc" $mailaddr < $td/txinfo
+[ "$mailaddr" ] && mail -s "tx $tx confirmed" $mailaddr < $td/txinfo
 xterm -e less $td/txinfo
 rm -rf $td
 exit 0

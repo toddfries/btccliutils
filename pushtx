@@ -41,10 +41,11 @@ fi
 
 while [ "$1" ]
 do
+	if false; then
+	# '<url> malformed' ???
 	echo "=> blockchain.info: "
 	send https://blockchain.info/pushtx "tx=$1"
 
-	if false; then
 	# domain does not resolve
 	echo "=> helloblock.io: "
 	send https://mainnet.helloblock.io/v1/transactions "rawTxHex=$1"
@@ -53,13 +54,14 @@ do
 	#  a transaction mined."
 	echo -n "=> eligius.st: "
 	send http://eligius.st/~wizkid057/newstats/pushtxn.php "transaction=$1&send=Push"
-	fi
 
+	# 'Method Not Allowed' ???
 	echo "=> coins.assembly.com: "
 	send https://coins.assembly.com/v1/transactions '{"transaction_hex": "'"$1\"}"
 
 	#echo "=> https://coinb.in/: "
 	#send https://coinb.in/
+	fi
 
 	echo "=> blockr.io: "
 	send https://btc.blockr.io/api/v1/tx/push "{\"hex\":\"$1\"}"

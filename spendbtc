@@ -314,6 +314,11 @@ foreach my $key (keys %walletcmds) {
 		decoderaw($cmd, $lasthex);
 		next;
 	}
+	if ($signedtx =~ /^-4: /) {
+		printf "%s: signrawtransaction Error: %s\n", $key, $signedtx;
+		decoderaw($cmd, $lasthex);
+		next;
+	}
 	my $parsedsignedtx;
 	eval {
 		if ($opt_v > 0) {
@@ -329,7 +334,10 @@ foreach my $key (keys %walletcmds) {
 		$lasthex = $signedhex;
 	}
 }
-
+if (!defined($signedhex)) {
+	print "Never succeeded in signing, bailing\n";
+	exit(1)
+}
 open(SEND,">>","sendtx.log");
 print SEND "${cmd} sendrawtransaction ${signedhex}\n";
 close(SEND);

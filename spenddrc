@@ -1,0 +1,537 @@
+#!/usr/bin/perl
+
+# Copyright (c) 2014 Todd T. Fries <todd@fries.net>
+#
+# Permission to use, copy, modify, and distribute this software for any
+# purpose with or without fee is hereby granted, provided that the above
+# copyright notice and this permission notice appear in all copies.
+#
+# THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+# WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+# MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+# ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+# WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+# ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+# OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+use warnings;
+use strict;
+
+# Selection of outputs for spending:
+#
+# using %walletcmds use listunspent to find unspent outputs, which then get
+# filered based on @txblacklist and @txaddrs
+#
+#
+# Generation of new outputs:
+#  total - txfee - abs = amount available for percentage breakdown
+#
+#  This means there can be four scenarios:
+#
+#  1) spending an absolute amount involves $abs > 0 and $pct = 100% for change
+#
+#  2) spending all via absolute, no change, $abs + $txfee = $total, $pct = 0.0
+#
+#  3) spending percentage only involves $abs = 0
+#
+#  4) spending percentage + absolute involves $pct adds to 100% and gets what is left
+#     after $abs
+
+sub usage
+{
+	print STDERR "must define -x <command> to access the wallet\n";
+	print STDERR "must define -o <output>[,<output>[,...]] send funds\n";
+	print STDERR "  <output> := <btc addr>:<pct% | amt [<currency>]>[:".
+	    "<min BTC>]\n";
+	print STDERR "\nFor example:\n";
+	print STDERR "\t-o 12345...:10%,12346...:20%,12347...:70%:.001,".
+	    "12348...:10USD\n";
+	print STDERR "\nThe above example takes \$10USD and then divides the\n";
+	print STDERR "rest percentage wise as specified.  If \$10USD is not\n";
+	print STDERR "available or the optional minimum is specified and not\n";
+	print STDERR "met, the transaction will not be sent.\n";
+	exit(1);
+}
+
+
+use JSON;
+
+use OpenBSD::Getopt;
+
+our $usdperbtc = 256.0; # random value, over-ride in config
+our @txaddrs;		# addresses (limit spending to inputs using these addrs)
+our $opt_b;		# blacklist of txhash to not use, comma separated
+our $opt_c;		# conf file
+our $opt_m;		# minimum amount to include
+our $opt_n;		# do not send tx if defined($opt_n)
+our $opt_o;		# output addr:pct, comma separated
+our $opt_t = 0;		# min tx fee (fee per byte calculated later)
+our $opt_v = 0;		# verbosity
+our $opt_C = 1;		# confirmation threshold, set to 0 for unconfirmed
+
+our %walletcmds;
+my $feepb = .00000081;
+
+$opt_c = $ENV{'HOME'}."/.spendbtc.conf";
+
+getopts('C:a:b:c:m:no:t:x:v');
+
+our @txblacklist;
+if (defined($opt_b)) {
+	@txblacklist = split(/,/,$opt_b);
+}
+
+our @outputs;
+if (defined($opt_o)) {
+	@outputs = split(/,/,$opt_o);
+}
+
+if ( -f $opt_c ) {
+	if ($opt_v > 0) {
+		print "Parsing ".$opt_c."\n";
+	}
+	eval `cat $opt_c`;
+}
+
+if (!@outputs) {
+	usage();
+}
+
+# sanity check that it equals 100%, 1.0 = 1%
+my $pct = 0.0;
+my $abs = 0.0;
+foreach my $o (@outputs) {
+	my ($addr,$p,$min) = split(/:/,$o);
+	if ($p =~ /%/) {
+		$p =~ s/%//;
+		my $tmp = $pct + $p;
+		if ($opt_v > 0) {
+			printf "adding pct .. %0.4f + %0.4f = %0.4f\n", $pct, $p, $tmp;
+		}
+		$pct = $tmp;
+	} elsif ($p =~ /usd$/i) {
+		$p =~ s/usd//i;
+		my $btc = $p * (1/$usdperbtc);
+		if ($opt_v > 0) {
+			printf "adding usd .. %0.2f usd -> %0.8fi btc\n", $p, $btc;
+		}
+		$abs += $btc;
+	} else {
+		my $tmp = $abs + $p;
+		if ($opt_v > 0) {
+			printf "adding abs .. %0.8f + %0.8f = %0.8f\n", $abs, $p, $tmp;
+		}
+		$abs = $tmp;
+	}
+}
+my $pctstr = sprintf("0.8f",$pct);
+my $pct100 = sprintf("0.8f",100.0);
+if ($pctstr ne $pct100) {
+	printf "Oops, percentage adds up to %0.8f(%s), try again..\n",$pct,$pct;
+	usage();
+}
+
+my @txsend = ();
+my $txcount = 0; # revisit, may need 'our' but not for now
+our $txvalue = 0.00000000;
+
+our $cmd;
+# XXX make this per wallet and global, not just global
+our ($confold,$confnew,$confavg,$gtxcount) = (undef,undef,0,0);
+my $json = JSON->new->allow_nonref;
+foreach my $key (keys %walletcmds) {
+	$cmd = $walletcmds{$key};
+	if ($opt_v > 0) {
+		print " ".$key.": ".$cmd;
+	}
+	open(U,"${cmd} listunspent ${opt_C} 2>&1 |");
+	my $line;
+	my $text = "";
+	while(<U>) {
+		chomp($line = $_);
+		$text .= $line;
+	}
+	close(U);
+	if ($text =~ /^rpcCommand:/) {
+		printf "    %s: Error: %s\n", $key, $text;
+		next;
+	}
+
+	my $parsed;
+	eval {
+		$parsed = $json->decode( $text );
+	};
+	if ($@) {
+		printf "%s: json->decode('%s') Error: %s\n", $key, $text, $@;
+		next;
+	}
+
+	#print $json->pretty->encode( $parsed );
+
+	if (ref($parsed) ne "ARRAY") {
+		print "Error somewhere, parsed ref = ".ref($parsed)."\n";
+		exit(1);
+	}
+
+	TX:
+	foreach my $tx (@{$parsed}) {
+		if (ref($tx) ne "HASH") {
+			print "Error somewhere, parsed tx = ".ref($tx)."\n";
+			exit(1);
+		}
+		if ($opt_v > 0) {
+			printf "%s: tx#%s %0.8f BTC\n", $key, $tx->{'txid'}, $tx->{'amount'};
+		}
+		foreach my $txb (@txblacklist) {
+			if ($txb eq $tx->{'txid'}) {
+				if ($opt_v > 0) {
+					printf "%s: tx#%s matched txblacklist, skipping\n",
+					    $key, $tx->{'txid'};
+				}
+				next TX;
+			}
+		}
+		if (defined($opt_m) && $tx->{'amount'} < $opt_m) {
+			next TX;
+		}
+		if (@txaddrs) {
+			my $found = 0;
+			foreach my $addr (@txaddrs) {
+				if ($addr eq $tx->{'address'}) {
+					$found = 1;
+					last;
+				}
+				if ($opt_v > 0) {
+					printf "%s: %s\@tx#%s != %s, skipping\n",
+					    $key, $tx->{'address'}, $tx->{'txid'}, $addr;
+				}
+			}
+			if ($found < 1) {
+				next TX;
+			}
+		}
+		$txcount++;
+		if ($opt_v > 0) {
+			foreach my $var (sort keys %{$tx}) {
+				printf "%02d: '%s' = '%s'\n", $txcount, $var, $tx->{$var};
+			}
+		}
+		my $txs;
+		$txs->{'txid'} = $tx->{'txid'};
+		$txs->{'vout'} = $tx->{'vout'};
+		$txs->{'conf'} = getconf($tx->{'txid'});
+		$txs->{'amt'}  = $tx->{'amount'};
+		push @txsend,$txs;
+		$txvalue += $tx->{'amount'}+0.00000000;
+	}
+	print $key.": All unspent inputs total: ".$txvalue."\n";
+	print $key.": Wallets balance: ".`${cmd} getbalance`."\n";
+}
+printf "Globally considered %d tx, youngest %d count, oldest %d count, avg %f\n",
+	$gtxcount, $confnew, $confold, $confavg;
+
+if ($txvalue == 0.0) {
+	print "0 BTC to spend, feedme!\n";
+	exit(1);
+}
+if ($txvalue <= $abs) {
+	print "Can't overspend BTC, feedme!\n";
+	exit(1);
+}
+$pctstr = sprintf "%0.8f", $pct;
+my $onestr = sprintf "%0.8f", 100.0;
+if ( !(($txvalue - $opt_t) == $abs) && $pctstr ne $onestr) {
+	my $intro;
+	if ($abs > 0) {
+		$intro = "Absolute spend";
+	} else {
+		$intro = "Spend";
+	}
+	printf "%s with leftovers (%0.4f%% - 100%% = %0.4f%%), percent must be 100%% for change!\n",$intro,$pct,100.0-$pct;
+	exit(1);
+}
+
+
+my ($rawtxhex,$priorityconf);
+($rawtxhex,$priorityconf) = calctx($opt_t, @txsend);
+my $fee;
+my $size = length($rawtxhex)/2;
+# simple calculation
+$fee = $size * $feepb;
+# complex calculation
+#  'round up to the nearest 1000 bytes'
+my $roundsize = sprintf("%0.0f",( ($size+499) / 1000)) * 1000;
+# $fee = $roundsize * $feepb;
+
+# XXX If all outputs are .01BTC or greater and
+# XXX If the tx size is less than 1000 bytes and
+# XXX Priority is 'high enough'
+#  priority = sum(input_value_in_base_units * input_age)/size_in_bytes
+#   if 'priority' > 57,600,000 .. fee free tx!
+#my $priority = ($input1 * $input1confcount + $input2*$input2confcount)/$size;
+
+if ($priorityconf > 0) {
+	my $priority = $priorityconf / $size;
+	printf "Tx priority is %f / %d = %f, to be free it needs to be 57600000, need %f more\n",
+		$priorityconf, $size, $priority, 57600000 - $priority;
+	if ($priority > 57600000) {
+		printf "Woah there, we can send this for free, high priority tx!\n";
+		printf "Over-riding fee to be 0\n";
+		$fee = 0.0;
+	}
+}
+
+
+# XXX show how much more btc would be required to make this calculation meet
+#     the 'all outputs are .01BTC or greater' requirement
+# XXX show how much time would be required to make this calculation meet the
+#     priority requirement wrt input age (how many more blocks before fee free)
+if ($fee > $opt_t) {
+	print "\n";
+	printf "Recalculating tx with %0.8f per byte in mind\n",$feepb;
+	printf "fee=(%db/2)*%0.8ffpb=%0.8f vs opt_t=%0.8f\n",
+	    length($rawtxhex),$feepb,$fee,$opt_t;
+	($rawtxhex,$priorityconf) = calctx($fee, @txsend);
+} else {
+	$fee = $opt_t;
+}
+
+my $lasthex = $rawtxhex;
+my $line;
+my $signedhex;
+foreach my $key (keys %walletcmds) {
+	$cmd = $walletcmds{$key};
+	my $signedtx = "";
+	open(S,"${cmd} signrawtransaction ${lasthex} 2>&1 |");
+	while(<S>) {
+		chomp($line = $_);
+		$signedtx .= $line;
+	#	print "S: ".$line."\n";
+	}
+	close(S);
+	if ($signedtx =~ /^rpcCommand/) {
+		printf "%s: signrawtransaction Error: %s\n", $key, $signedtx;
+		decoderaw($cmd, $lasthex);
+		next;
+	}
+	if ($signedtx =~ /^-4: /) {
+		printf "%s: signrawtransaction Error: %s\n", $key, $signedtx;
+		decoderaw($cmd, $lasthex);
+		next;
+	}
+	my $parsedsignedtx;
+	eval {
+		if ($opt_v > 0) {
+			printf "json->decode('%s')...\n",$signedtx;
+		}
+		$parsedsignedtx = $json->decode( $signedtx );
+	};
+	if ($@) {
+		printf "json->decode('%s') failed: %s\n",$signedtx,$@;
+		decoderaw($cmd, $signedtx);
+	} else {
+		$signedhex = $parsedsignedtx->{'hex'};
+		$lasthex = $signedhex;
+	}
+}
+if (!defined($signedhex)) {
+	print "Never succeeded in signing, bailing\n";
+	exit(1)
+}
+open(SEND,">>","sendtx.log");
+print SEND "${cmd} sendrawtransaction ${signedhex}\n";
+close(SEND);
+
+if (!defined($opt_n)) {
+	my $line;
+	my $text = "";
+	open(C,"${cmd} sendrawtransaction ${signedhex} 2>&1 |");
+	while(<C>) {
+		chomp($line = $_);
+		$text .= $line;
+	}
+	close(C);
+	if ($text =~ /^rpcCommand/) {
+		printf "signrawtransaction Error: %s\n", $text;
+		decoderaw($cmd, $signedhex);
+		exit(1);
+	}
+	system("./pushtx ${signedhex}");
+} else {
+	print "not sent: ".$signedhex."\n";
+}
+
+decoderaw($cmd,$signedhex);
+close(D);
+
+sub decoderaw {
+	my ($cmd, $rawtx) = @_;
+	open(D,"${cmd} decoderawtransaction ${rawtx}|");
+	while(<D>) {
+		print "D: ".$_;
+	}
+}
+
+sub calctx {
+	my ($txfee, @txsend) = @_;
+
+	my $priorityconf = 0;
+
+	#print "Pretty view of transactions to send:\n";
+	#print $json->pretty->encode( \@txsend );
+	print "Compact view of transactions to send:\n";
+	#print $json->encode( \@txsend )."\n";
+	my $str = "[";
+	foreach my $tx (@txsend) {
+		$str .= "{";
+		foreach my $v (sort keys %{$tx}) {
+			if ($v eq "txid") {
+				$str .= sprintf "\"txid\":\"%s\",",$tx->{$v};
+				next;
+			}
+			if ($v eq "vout") {
+				$str .= sprintf "\"vout\":%d",$tx->{$v};
+				last;
+			}
+		}
+		$str .= "},";
+		my ($txconfcount, $txamt) = ($tx->{'conf'}, $tx->{'amt'});
+		if (defined($txconfcount) && defined($txamt) && $txconfcount > 0) {
+			my $prio = $tx->{'conf'} * $tx->{'amt'};
+			if ($opt_v > 0) {
+				printf "%s priority is %d * %f = %f\n",
+				    $tx->{'txid'}, $tx->{'conf'}, $tx->{'amt'}, $prio;
+			}
+			$priorityconf += $prio;
+		} else {
+			if (!defined($txconfcount)) {
+				printf "%s: 'conf' not defined\n", $tx->{'txid'};
+			}
+			if (!defined($txamt)) {
+				printf "%s: 'amt' not defined\n", $tx->{'txid'};
+			}
+		}
+	}
+	$str =~ s/,$//;
+	$str .= "]";
+	print $str."\n";
+
+	my $sendtx = $str;
+
+	my $addrs;
+	my $net = $txvalue - $txfee;
+	my $sum = 0.00000000;
+	my $abssum = 0.00000000;
+
+	# handle absolute btc amounts
+	foreach my $o (@outputs) {
+		my ($addr,$pct,$min) = split(/:/,$o);
+		my $amt;
+		if ($pct =~ /(%|usd)/i) {
+			next;
+		}
+		$amt = $pct;
+		$addrs->{$addr} = sprintf "%0.8f",$amt;
+		$abssum += $amt;
+	}
+
+	# handle absolute usd amounts converted to btc
+	foreach my $o (@outputs) {
+		my ($addr,$pct,$min) = split(/:/,$o);
+		my $usd;
+		if (! ($pct =~ /usd/i)) {
+			next;
+		}
+		$usd = $pct;
+		$usd =~ s/usd//i;
+		my $btc = $usd * (1/$usdperbtc);
+		$addrs->{$addr} = sprintf "%0.8f",$btc;
+		$abssum += $btc;
+	}
+
+	my $absnet = $net - $abssum;
+
+	if ($absnet < 0) {
+		printf STDERR "Absolute values went negative by %0.8f, bailing!\n",
+	    	$absnet;
+		exit(1);
+	}
+
+	# handle remainder as percentages (if any)
+	foreach my $o (@outputs) {
+		my ($addr,$pct,$min) = split(/:/,$o);
+		my $amt;
+		if ($pct =~ /%/) {
+			$pct =~ s/%//;
+
+			$amt = $absnet*($pct/100);
+			if (defined($min) && $amt < $min) {
+				printf "output '%s' has a minimum. ".
+			    	"%0.8f * %0.4f%% = %0.8f .. is < %0.8f. ".
+			    	"disabling transmission!\n",
+			    	$o, $absnet, $pct/100, $amt, $min;
+				$opt_n=1;
+			}
+			$addrs->{$addr} = sprintf "%0.8f",$amt;
+			$sum += $amt;
+		}
+	}
+
+	print "Compact view of dest addrs:\n";
+	#print $json->encode( $addrs )."\n";
+	$str = "{";
+	foreach my $v (sort keys %{$addrs}) {
+		$str .= sprintf "\"%s\":%0.8f,",$v,$addrs->{$v};
+	}
+	$str =~ s/,$//;
+	$str .= "}";
+	print $str."\n";
+
+	my $sendaddrs = $str;
+
+	printf "Tx Fee: %0.8f\n",$txvalue-$sum-$abssum;
+
+	my $rawtxhex;
+	open(C,"${cmd} createrawtransaction '${sendtx}' '${sendaddrs}'|");
+	my $tmp = <C>;
+	close(C);
+	if (!defined($tmp)) {
+		print "rawtxhex !defined, bailing\n";
+		exit(1);
+	}
+	chomp($rawtxhex = $tmp);
+
+	return ($rawtxhex,$priorityconf);
+}
+sub getconf {
+	my ($txid) = @_;
+	my $line;
+	my $confcount = 0;
+
+	open(C,"$cmd gettransaction $txid 2>&1 |");
+	while(<C>) {
+		chomp($line=$_);
+		if ($line =~ /"confirmations": ([0-9]+),/) {
+			$confcount = $1;
+			last;
+		}
+	}
+	close(C);
+	if ($opt_v > 0) {
+		printf "getconf: %s -> %d confirmations\n", $txid, $confcount;
+	}
+	if (!defined($confold) || $confcount > $confold) {
+		$confold = $confcount;
+	}
+	if (!defined($confnew) || $confcount < $confnew) {
+		$confnew = $confcount;
+	}
+	my $tmptxcount = $gtxcount;
+	$gtxcount++;
+	if ($gtxcount == 1) {
+		$confavg = $confcount;
+	} else {
+		$confavg = ($confavg * $tmptxcount + $confcount) / $gtxcount;
+	}
+	return $confcount;
+}

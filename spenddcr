@@ -319,6 +319,11 @@ foreach my $key (keys %walletcmds) {
 		decoderaw($cmd, $lasthex);
 		next;
 	}
+	if ($signedtx =~ /Error/) {
+		printf "%s: signrawtransaction Error: %s\n", $key, $signedtx;
+		decoderaw($cmd, $lasthex);
+		next;
+	}
 	my $parsedsignedtx;
 	eval {
 		if ($opt_v > 0) {
@@ -351,12 +356,12 @@ if (!defined($opt_n)) {
 		$text .= $line;
 	}
 	close(C);
-	if ($text =~ /^rpcCommand/) {
+#  22: TX rejected: transaction xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx has insufficient priority (3.757829063979849e+07 <= 5.76e+07)
+	if ($text =~ /^rpcCommand/ || $text =~ /TX rejected/) {
 		printf "signrawtransaction Error: %s\n", $text;
 		decoderaw($cmd, $signedhex);
 		exit(1);
 	}
-	system("./pushtx ${signedhex}");
 } else {
 	print "not sent: ".$signedhex."\n";
 }

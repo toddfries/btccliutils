@@ -42,7 +42,7 @@ sub usage
 	print STDERR "must define -x <command> to access the wallet\n";
 	print STDERR "must define -o <output>[,<output>[,...]] send funds\n";
 	print STDERR "  <output> := <dcr addr>:<pct% | amt [<currency>]>[:".
-	    "<min BTC>]\n";
+	    "<min DCR>]\n";
 	print STDERR "\nFor example:\n";
 	print STDERR "\t-o 12345...:10%,12346...:20%,12347...:70%:.001,".
 	    "12348...:10USD\n";
@@ -179,19 +179,33 @@ foreach my $key (keys %walletcmds) {
 			print "Error somewhere, parsed tx = ".ref($tx)."\n";
 			exit(1);
 		}
+		my $prestr = sprintf "%s: tx#%s.%s", $key, $tx->{'txid'}, $tx->{'vout'};
 		if ($opt_v > 0) {
-			printf "%s: tx#%s %0.8f BTC\n", $key, $tx->{'txid'}, $tx->{'amount'};
+			printf "%s %0.8f DCR\n", $prestr, $tx->{'amount'};
 		}
 		foreach my $txb (@txblacklist) {
 			if ($txb eq $tx->{'txid'}) {
 				if ($opt_v > 0) {
-					printf "%s: tx#%s matched txblacklist, skipping\n",
-					    $key, $tx->{'txid'};
+					printf "%s matched txblacklist, skipping\n", $prestr;
 				}
 				next TX;
 			}
 		}
 		if (defined($opt_m) && $tx->{'amount'} < $opt_m) {
+			next TX;
+		}
+		if ($tx->{'amount'} == 0) {
+			next TX;
+		}
+		my $minconf = 1;
+		if ($tx->{'txtype'} == 2) {
+			$minconf = 256;
+		}
+		if ($tx->{'confirmations'} < $minconf) {
+			if ($opt_v > 0) {
+				printf "%s has %d confirmations, < %d conf, !spendable, skipping\n",
+				    $prestr, $tx->{'confirmations'}, $minconf;
+			}
 			next TX;
 		}
 		if (@txaddrs) {
@@ -202,8 +216,8 @@ foreach my $key (keys %walletcmds) {
 					last;
 				}
 				if ($opt_v > 0) {
-					printf "%s: %s\@tx#%s != %s, skipping\n",
-					    $key, $tx->{'address'}, $tx->{'txid'}, $addr;
+					printf "%s %s\@tx#%s != %s, skipping\n",
+					    $prestr, $tx->{'address'}, $tx->{'txid'}, $addr;
 				}
 			}
 			if ($found < 1) {
@@ -219,8 +233,9 @@ foreach my $key (keys %walletcmds) {
 		my $txs;
 		$txs->{'txid'} = $tx->{'txid'};
 		$txs->{'vout'} = $tx->{'vout'};
-		$txs->{'conf'} = getconf($tx->{'txid'});
+		$txs->{'conf'} = $tx->{'confirmations'};
 		$txs->{'amt'}  = $tx->{'amount'};
+		$txs->{'tree'} = $tx->{'tree'};
 		push @txsend,$txs;
 		$txvalue += $tx->{'amount'}+0.00000000;
 	}
@@ -231,11 +246,11 @@ printf "Globally considered %d tx, youngest %d count, oldest %d count, avg %f\n"
 	$gtxcount, $confnew, $confold, $confavg;
 
 if ($txvalue == 0.0) {
-	print "0 BTC to spend, feedme!\n";
+	print "0 DCR to spend, feedme!\n";
 	exit(1);
 }
 if ($txvalue <= $abs) {
-	print "Can't overspend BTC, feedme!\n";
+	print "Can't overspend DCR, feedme!\n";
 	exit(1);
 }
 $pctstr = sprintf "%0.8f", $pct;
@@ -263,7 +278,7 @@ $fee = $size * $feepb;
 my $roundsize = sprintf("%0.0f",( ($size+499) / 1000)) * 1000;
 # $fee = $roundsize * $feepb;
 
-# XXX If all outputs are .01BTC or greater and
+# XXX If all outputs are .01DCR or greater and
 # XXX If the tx size is less than 1000 bytes and
 # XXX Priority is 'high enough'
 #  priority = sum(input_value_in_base_units * input_age)/size_in_bytes
@@ -283,7 +298,7 @@ if ($priorityconf > 0) {
 
 
 # XXX show how much more dcr would be required to make this calculation meet
-#     the 'all outputs are .01BTC or greater' requirement
+#     the 'all outputs are .01DCR or greater' requirement
 # XXX show how much time would be required to make this calculation meet the
 #     priority requirement wrt input age (how many more blocks before fee free)
 if ($fee > $opt_t) {
@@ -507,36 +522,4 @@ sub calctx {
 	chomp($rawtxhex = $tmp);
 
 	return ($rawtxhex,$priorityconf);
-}
-sub getconf {
-	my ($txid) = @_;
-	my $line;
-	my $confcount = 0;
-
-	open(C,"$cmd gettransaction $txid 2>&1 |");
-	while(<C>) {
-		chomp($line=$_);
-		if ($line =~ /"confirmations": ([0-9]+),/) {
-			$confcount = $1;
-			last;
-		}
-	}
-	close(C);
-	if ($opt_v > 0) {
-		printf "getconf: %s -> %d confirmations\n", $txid, $confcount;
-	}
-	if (!defined($confold) || $confcount > $confold) {
-		$confold = $confcount;
-	}
-	if (!defined($confnew) || $confcount < $confnew) {
-		$confnew = $confcount;
-	}
-	my $tmptxcount = $gtxcount;
-	$gtxcount++;
-	if ($gtxcount == 1) {
-		$confavg = $confcount;
-	} else {
-		$confavg = ($confavg * $tmptxcount + $confcount) / $gtxcount;
-	}
-	return $confcount;
 }

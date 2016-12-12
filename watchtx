@@ -34,6 +34,9 @@ tx="$1"
 
 if ! [ "$tx" ]; then
 	echo "No tx arg, bailing"
+	echo
+	echo "Usage:"
+	echo " watchtx [-t <pollsecs>] [-c <btcctl ...>] [-m a@b.c] [-C <minconf>] <txid>"
 	exit 1
 fi
 echo "Watching txid $tx"

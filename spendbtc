@@ -221,6 +221,7 @@ foreach my $key (keys %walletcmds) {
 		$txs->{'vout'} = $tx->{'vout'};
 		$txs->{'conf'} = getconf($tx->{'txid'});
 		$txs->{'amt'}  = $tx->{'amount'};
+		$txs->{'scriptpubkey'} = $tx->{'scriptPubKey'};
 		push @txsend,$txs;
 		$txvalue += $tx->{'amount'}+0.00000000;
 	}
@@ -314,7 +315,7 @@ foreach my $key (keys %walletcmds) {
 		decoderaw($cmd, $lasthex);
 		next;
 	}
-	if ($signedtx =~ /^-4: /) {
+	if ($signedtx =~ /^-[0-9]+: /) {
 		printf "%s: signrawtransaction Error: %s\n", $key, $signedtx;
 		decoderaw($cmd, $lasthex);
 		next;
@@ -384,16 +385,11 @@ sub calctx {
 	my $str = "[";
 	foreach my $tx (@txsend) {
 		$str .= "{";
-		foreach my $v (sort keys %{$tx}) {
-			if ($v eq "txid") {
-				$str .= sprintf "\"txid\":\"%s\",",$tx->{$v};
-				next;
-			}
-			if ($v eq "vout") {
-				$str .= sprintf "\"vout\":%d",$tx->{$v};
-				last;
-			}
-		}
+		$str .= sprintf "\"txid\":\"%s\",",$tx->{'txid'};
+		$str .= sprintf "\"vout\":%d,",$tx->{'vout'};
+		$str .= sprintf "\"amount\":%f,",$tx->{'amt'};
+		$str .= sprintf "\"scriptpubkey\":\"%s\",",$tx->{'scriptpubkey'};
+		$str .= sprintf "\"redeemscript\":\"\"";
 		$str .= "},";
 		my ($txconfcount, $txamt) = ($tx->{'conf'}, $tx->{'amt'});
 		if (defined($txconfcount) && defined($txamt) && $txconfcount > 0) {

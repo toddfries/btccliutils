@@ -18,6 +18,9 @@ delay=30
 cmd="btcctl"
 mailaddr=""
 minconf="1"
+
+[ -f ~/.watchtx.conf ] && . ~/.watchtx.conf
+
 while [ "$1" ]
 do
 	case "$1" in

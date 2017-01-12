@@ -18,6 +18,8 @@ delay=30
 cmd="btcctl"
 mailaddr=""
 minconf="1"
+td=$(mktemp -d /tmp/watchtx.XXXXXXXXXXXXXXX)
+trap 'rm -rf $td' 0 1 2 3 13 15
 
 [ -f ~/.watchtx.conf ] && . ~/.watchtx.conf
 
@@ -33,6 +35,26 @@ do
 	shift
 done
 
+getinfo() {
+	local tx="$1"
+	$cmd gettransaction $tx > $td/txinfo
+}
+getconf() {
+	local tx="$1"
+	getinfo $tx
+	awk '/confirmations/{sub(",","");print $2}' $td/txinfo
+}
+getheight() {
+	local tx="$1"
+	getinfo $tx
+	local bhash=$(awk '/blockhash/{sub(",","");gsub("\"","");print $2}' $td/txinfo)
+	$cmd getblock $bhash | awk '/height/{sub(",","");print $2}'
+}
+showtxinfo() {
+	local tx="$1"
+	echo "$(date) confirmations=$(getconf $tx) height=$(getheight $tx)"
+}
+
 tx="$1"
 
 if ! [ "$tx" ]; then
@@ -46,7 +68,7 @@ echo "Watching txid $tx"
 lastconf=0
 while :
 do
-	confirmations=$($cmd gettransaction $tx|awk '/confirmations/{sub(",","");print $2}')
+	confirmations=$(getconf "$tx")
 	if ! [ "$confirmations" ]; then
 		echo "Error reading confirmations, bailing"
 		exit 1
@@ -56,15 +78,13 @@ do
 	fi
 	if [ $confirmations -gt 0 ]; then
 		if [ $lastconf -lt $confirmations ]; then
-			echo "$(date) confirmations=$confirmations"
+			showtxinfo "$tx"
 			lastconf=$confirmations
 		fi
 	fi
 	sleep $delay
 done
-echo "$(date) confirmations=$confirmations"
-td=$(mktemp -d /tmp/watchtx.XXXXXXXXXXXXXXX)
-$cmd gettransaction $tx > $td/txinfo
+showtxinfo "$tx"
 [ "$mailaddr" ] && mail -s "tx $tx confirmed" $mailaddr < $td/txinfo
 date
 rm -rf $td

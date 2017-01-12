@@ -62,9 +62,10 @@ do
 	fi
 	sleep $delay
 done
+echo "$(date) confirmations=$confirmations"
 td=$(mktemp -d /tmp/watchtx.XXXXXXXXXXXXXXX)
 $cmd gettransaction $tx > $td/txinfo
 [ "$mailaddr" ] && mail -s "tx $tx confirmed" $mailaddr < $td/txinfo
-xterm -e less $td/txinfo
+date
 rm -rf $td
 exit 0

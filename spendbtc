@@ -124,8 +124,8 @@ foreach my $o (@outputs) {
 		$abs = $tmp;
 	}
 }
-my $pctstr = sprintf("0.8f",$pct);
-my $pct100 = sprintf("0.8f",100.0);
+my $pctstr = sprintf("%0.8f",$pct);
+my $pct100 = sprintf("%0.8f",100.0);
 if ($pctstr ne $pct100) {
 	printf "Oops, percentage adds up to %0.8f(%s), try again..\n",$pct,$pct;
 	usage();
@@ -432,7 +432,10 @@ sub calctx {
 			next;
 		}
 		$amt = $pct;
-		$addrs->{$addr} = sprintf "%0.8f",$amt;
+		if (!defined($addrs->{$addr})) {
+			$addrs->{$addr}=0.0;
+		}
+		$addrs->{$addr} += sprintf "%0.8f",$amt;
 		$abssum += $amt;
 	}
 
@@ -446,7 +449,10 @@ sub calctx {
 		$usd = $pct;
 		$usd =~ s/usd//i;
 		my $btc = $usd * (1/$usdperbtc);
-		$addrs->{$addr} = sprintf "%0.8f",$btc;
+		if (!defined($addrs->{$addr})) {
+			$addrs->{$addr}=0.0;
+		}
+		$addrs->{$addr} += sprintf "%0.8f",$btc;
 		$abssum += $btc;
 	}
 
@@ -473,7 +479,10 @@ sub calctx {
 			    	$o, $absnet, $pct/100, $amt, $min;
 				$opt_n=1;
 			}
-			$addrs->{$addr} = sprintf "%0.8f",$amt;
+			if (!defined($addrs->{$addr})) {
+				$addrs->{$addr}=0.0;
+			}
+			$addrs->{$addr} += sprintf "%0.8f",$amt;
 			$sum += $amt;
 		}
 	}

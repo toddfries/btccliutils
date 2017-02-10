@@ -137,7 +137,7 @@ our $txvalue = 0.00000000;
 
 our $cmd;
 # XXX make this per wallet and global, not just global
-our ($confold,$confnew,$confavg,$gtxcount) = (undef,undef,0,0);
+our ($confold,$confnew,$confavg,$gtxcount) = (0,0,0,0);
 my $json = JSON->new->allow_nonref;
 foreach my $key (keys %walletcmds) {
 	$cmd = $walletcmds{$key};
@@ -316,6 +316,11 @@ foreach my $key (keys %walletcmds) {
 		next;
 	}
 	if ($signedtx =~ /^-[0-9]+: /) {
+		printf "%s: signrawtransaction Error: %s\n", $key, $signedtx;
+		decoderaw($cmd, $lasthex);
+		next;
+	}
+	if ($signedtx =~ /^Post https.*: EOF$/) {
 		printf "%s: signrawtransaction Error: %s\n", $key, $signedtx;
 		decoderaw($cmd, $lasthex);
 		next;
@@ -516,10 +521,10 @@ sub getconf {
 	if ($opt_v > 0) {
 		printf "getconf: %s -> %d confirmations\n", $txid, $confcount;
 	}
-	if (!defined($confold) || $confcount > $confold) {
+	if ($confold < 1 || $confcount > $confold) {
 		$confold = $confcount;
 	}
-	if (!defined($confnew) || $confcount < $confnew) {
+	if ($confnew < 1 || $confcount < $confnew) {
 		$confnew = $confcount;
 	}
 	my $tmptxcount = $gtxcount;

@@ -22,6 +22,7 @@ bg=1
 onecheck=0
 runqueue=0
 queuedir=$HOME/var/spool/watchtxq
+rundir=$HOME/var/run
 rmfile=""
 verbose=0
 td=$(mktemp -d /tmp/watchtx.XXXXXXXXXXXXXXX)
@@ -49,7 +50,13 @@ do
 done
 args="$@"
 
-mkdir -p "$queuedir"
+mkdir -p "$queuedir" "$rundir"
+
+if tty > /dev/null 2>&1; then
+	tty=/dev/tty
+else
+	tty=/dev/null
+fi
 
 getinfo() {
 	local tx="$1"
@@ -70,13 +77,23 @@ showtxinfo() {
 	local tx="$1"
 	local confcount=$(getconf $tx)
 	local height=$(getheight $tx)
-	if [ verbose -eq 0 ]; then
-		return
-	fi
-	echo "$(date) confirmations=$confcount height=$height"
+	echo "$(date) confirmations=$confcount height=$height" >> $tty
 }
 
 if [ runqueue -eq 1 ]; then
+	pidfile="$rundir/watchtx.pid"
+	if ! [ -f "$pidfile" ]; then
+		echo $$ > "$pidfile"
+	fi
+	# if old pid is active, do not double down, exit gracefully
+	opid=$(<"$pidfile")
+	if ! [ opid -eq $$ ]; then
+		if ps -p $opid -o ppid > /dev/null 2>&1; then
+			exit 0
+		fi
+		echo $$ > "$pidfile"
+	fi
+
 	for f in "$queuedir"/*
 	do
 		[ -f "$f" ] || continue
@@ -84,6 +101,8 @@ if [ runqueue -eq 1 ]; then
 		[ verbose -gt 0 ] && echo "Running $f"
 		sh "$f"
 	done
+
+	rm -f "$pidfile"
 	exit 0
 fi
 

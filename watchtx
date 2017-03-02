@@ -68,7 +68,12 @@ getheight() {
 }
 showtxinfo() {
 	local tx="$1"
-	echo "$(date) confirmations=$(getconf $tx) height=$(getheight $tx)"
+	local confcount=$(getconf $tx)
+	local height=$(getheight $tx)
+	if [ verbose -eq 0 ]; then
+		return
+	fi
+	echo "$(date) confirmations=$confcount height=$height"
 }
 
 if [ runqueue -eq 1 ]; then
@@ -95,7 +100,7 @@ if [ bg -eq 1 ]; then
 	echo "Queueing txid $tx"
 	TMPDIR="$queuedir"
 	file=$(mktemp)
-	echo "$0 -fg -1 -t $delay -c \"$cmd\" -m $mailaddr -C $minconf $args" > "$file"
+	echo "$0 -fg -rm \"$file\" -1 -t $delay -c \"$cmd\" -m $mailaddr -C $minconf $args" > "$file"
 	exit 0
 fi
 

@@ -33,6 +33,7 @@ while(<stdin>) {
 		$result .= $_;
 	}
 	close(TX);
+	printf "%s: %d len result\n",$line,length($result);
 	if (length($result) == 0) {
 		next;
 	}

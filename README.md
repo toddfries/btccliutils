@@ -36,7 +36,7 @@ Random utilities for interacting with bitcoin rpc.
 
 	my @outputs_example1 = (
 		"b1234..5:10%",
-		"b1239..2:90%"
+		"b1239..2:90%",
 		"b1245..5:0.001", # taken off the top then %'age for above
 	);
 	@outputs = @outputs_example1;

@@ -10,7 +10,7 @@ Random utilities for interacting with bitcoin rpc.
    - permits setting txfee (since it uses the send/sign/create rawtransaction
      rpc calls
    - cli utility
-   - uses 'btcctl' from conformal's btcd at https://github.com/conformal/btcd.git
+   - uses 'btcctl' from conformal's btcd at https://github.com/btcsuite/btcd.git
 
   Example 1:
 
@@ -47,14 +47,12 @@ NOTES:
 
 # actually does require you to unlock your wallets prior to running.
 
-# actually does create real live transctions so be wary of putting
-  the wrong address in your conf files.
+# actually does create real live transctions so be wary of putting the wrong address in your conf files.
 
 # remove '-n' when you are confident this is going to do what you want
 
-# creates a 'sendtx.log' file with all transactions appended in the event
-  retransmission is warranted, for example... I frequently do the fun trick:
+# creates a 'sendtx.log' file with all transactions appended in the event retransmission is warranted, for example... I frequently do the fun trick:
 
 	tail -1 sendtx.log | sed 's/send/decode/' | sh | less
 
-Donations: 1HeSyCxcMvmaZg3CyqSthrqgm6fwdREqfG
+Donations: bitcoin:1HeSyCxcMvmaZg3CyqSthrqgm6fwdREqfG

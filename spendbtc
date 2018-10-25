@@ -56,7 +56,7 @@ sub usage
 
 use JSON;
 
-use OpenBSD::Getopt;
+use Getopt::Std;
 
 our $usdperbtc = 256.0; # random value, over-ride in config
 our @txaddrs;		# addresses (limit spending to inputs using these addrs)

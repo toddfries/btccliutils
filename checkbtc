@@ -27,7 +27,7 @@ sub usage
 
 use JSON;
 
-use OpenBSD::Getopt;
+use Getopt::Std;
 
 our $opt_b;		# blacklist of txhash to not use, comma separated
 our $opt_c;		# conf file
